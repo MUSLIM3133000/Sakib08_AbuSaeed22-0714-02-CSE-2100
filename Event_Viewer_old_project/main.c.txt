@@ -1,0 +1,783 @@
+#include <gtk/gtk.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+#ifdef _WIN32
+#include "event_log_reader.h"
+#include <windows.h>
+#endif
+
+typedef struct {
+    GtkApplication *app;
+    GtkWidget *window;
+    GtkWidget *tree_view;
+    GtkTreeStore *tree_store;
+    GtkWidget *admin_tree_view;
+    GtkListStore *admin_store;
+    GtkWidget *recent_tree_view;
+    GtkListStore *recent_store;
+    GtkWidget *log_tree_view;
+    GtkListStore *log_store;
+    GtkWidget *notebook;
+    GtkWidget *event_details_view;
+    GtkListStore *event_details_store;
+    char *current_log_name;
+#ifdef _WIN32
+    EVT_HANDLE current_log_handle;
+#endif
+} EventViewerData;
+
+static void activate(GtkApplication *app, gpointer user_data);
+static GtkWidget *create_menubar(EventViewerData *data);
+static GtkWidget *create_toolbar(EventViewerData *data);
+static GtkWidget *create_sidebar(EventViewerData *data);
+static GtkWidget *create_content_area(EventViewerData *data);
+static GtkWidget *create_admin_events_table(EventViewerData *data);
+static GtkWidget *create_recent_nodes_table(EventViewerData *data);
+static GtkWidget *create_log_summary_table(EventViewerData *data);
+static GtkWidget *create_event_details_view(EventViewerData *data);
+static void populate_tree_data(EventViewerData *data);
+static void populate_table_data(EventViewerData *data);
+static void on_tree_selection_changed(GtkTreeSelection *selection, gpointer user_data);
+static void load_log_events(EventViewerData *data, const char *log_name);
+
+static void on_quit_action(GSimpleAction *action, GVariant *parameter, gpointer user_data);
+static void on_about_action(GSimpleAction *action, GVariant *parameter, gpointer user_data);
+static void on_refresh_action(GSimpleAction *action, GVariant *parameter, gpointer user_data);
+static void on_open_log_action(GSimpleAction *action, GVariant *parameter, gpointer user_data);
+static void on_save_log_action(GSimpleAction *action, GVariant *parameter, gpointer user_data);
+static void on_create_view_action(GSimpleAction *action, GVariant *parameter, gpointer user_data);
+static void on_import_view_action(GSimpleAction *action, GVariant *parameter, gpointer user_data);
+
+#ifdef _WIN32
+static BOOL IsRunningAsAdmin() {
+    BOOL isAdmin = FALSE;
+    PSID adminGroup = NULL;
+    SID_IDENTIFIER_AUTHORITY ntAuthority = SECURITY_NT_AUTHORITY;
+    
+    if (AllocateAndInitializeSid(&ntAuthority, 2, 
+        SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS,
+        0, 0, 0, 0, 0, 0, &adminGroup)) {
+        CheckTokenMembership(NULL, adminGroup, &isAdmin);
+        FreeSid(adminGroup);
+    }
+    
+    return isAdmin;
+}
+#endif
+
+static const GActionEntry app_entries[] = {
+    {"quit", on_quit_action, NULL, NULL, NULL},
+    {"about", on_about_action, NULL, NULL, NULL},
+    {"refresh", on_refresh_action, NULL, NULL, NULL},
+    {"open_log", on_open_log_action, NULL, NULL, NULL},
+    {"save_log", on_save_log_action, NULL, NULL, NULL},
+    {"create_view", on_create_view_action, NULL, NULL, NULL},
+    {"import_view", on_import_view_action, NULL, NULL, NULL}
+};
+
+int main(int argc, char **argv) {
+    GtkApplication *app = gtk_application_new("com.example.EventViewer", G_APPLICATION_DEFAULT_FLAGS);
+    g_signal_connect(app, "activate", G_CALLBACK(activate), NULL);
+    g_action_map_add_action_entries(G_ACTION_MAP(app), app_entries, G_N_ELEMENTS(app_entries), app);
+    
+    int status = g_application_run(G_APPLICATION(app), argc, argv);
+    g_object_unref(app);
+    return status;
+}
+
+static void activate(GtkApplication *app, gpointer user_data) {
+    EventViewerData *data = g_malloc0(sizeof(EventViewerData));
+    data->app = app;
+    data->current_log_name = NULL;
+#ifdef _WIN32
+    data->current_log_handle = NULL;
+#endif
+    
+    data->window = gtk_application_window_new(app);
+    gtk_window_set_title(GTK_WINDOW(data->window), "Event Viewer");
+    gtk_window_set_default_size(GTK_WINDOW(data->window), 1200, 800);
+    
+    GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_window_set_child(GTK_WINDOW(data->window), main_box);
+    
+    gtk_box_append(GTK_BOX(main_box), create_menubar(data));
+    gtk_box_append(GTK_BOX(main_box), create_toolbar(data));
+    
+    GtkWidget *paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+    gtk_paned_set_shrink_start_child(GTK_PANED(paned), FALSE);
+    gtk_paned_set_shrink_end_child(GTK_PANED(paned), FALSE);
+    gtk_paned_set_position(GTK_PANED(paned), 250);
+    gtk_box_append(GTK_BOX(main_box), paned);
+    
+    gtk_paned_set_start_child(GTK_PANED(paned), create_sidebar(data));
+    gtk_paned_set_end_child(GTK_PANED(paned), create_content_area(data));
+    
+    populate_tree_data(data);
+    populate_table_data(data);
+    
+    gtk_window_present(GTK_WINDOW(data->window));
+    g_object_set_data_full(G_OBJECT(data->window), "event_viewer_data", data, g_free);
+}
+
+static GtkWidget *create_menubar(EventViewerData *data) {
+    GtkWidget *menubar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_add_css_class(menubar, "menubar");
+    
+    GtkWidget *file_button = gtk_menu_button_new();
+    gtk_menu_button_set_label(GTK_MENU_BUTTON(file_button), "File");
+    GMenu *file_menu = g_menu_new();
+    g_menu_append(file_menu, "Open Saved Log...", "app.open_log");
+    g_menu_append(file_menu, "Save Log...", "app.save_log");
+    g_menu_append(file_menu, "Exit", "app.quit");
+    gtk_menu_button_set_menu_model(GTK_MENU_BUTTON(file_button), G_MENU_MODEL(file_menu));
+    gtk_box_append(GTK_BOX(menubar), file_button);
+    
+    GtkWidget *action_button = gtk_menu_button_new();
+    gtk_menu_button_set_label(GTK_MENU_BUTTON(action_button), "Action");
+    GMenu *action_menu = g_menu_new();
+    g_menu_append(action_menu, "Refresh", "app.refresh");
+    gtk_menu_button_set_menu_model(GTK_MENU_BUTTON(action_button), G_MENU_MODEL(action_menu));
+    gtk_box_append(GTK_BOX(menubar), action_button);
+    
+    GtkWidget *view_button = gtk_menu_button_new();
+    gtk_menu_button_set_label(GTK_MENU_BUTTON(view_button), "View");
+    GMenu *view_menu = g_menu_new();
+    g_menu_append(view_menu, "Create Custom View...", "app.create_view");
+    g_menu_append(view_menu, "Import Custom View...", "app.import_view");
+    gtk_menu_button_set_menu_model(GTK_MENU_BUTTON(view_button), G_MENU_MODEL(view_menu));
+    gtk_box_append(GTK_BOX(menubar), view_button);
+    
+    GtkWidget *help_button = gtk_menu_button_new();
+    gtk_menu_button_set_label(GTK_MENU_BUTTON(help_button), "Help");
+    GMenu *help_menu = g_menu_new();
+    g_menu_append(help_menu, "About", "app.about");
+    gtk_menu_button_set_menu_model(GTK_MENU_BUTTON(help_button), G_MENU_MODEL(help_menu));
+    gtk_box_append(GTK_BOX(menubar), help_button);
+    
+    g_object_unref(file_menu);
+    g_object_unref(action_menu);
+    g_object_unref(view_menu);
+    g_object_unref(help_menu);
+    
+    return menubar;
+}
+
+static GtkWidget *create_toolbar(EventViewerData *data) {
+    GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_add_css_class(toolbar, "toolbar");
+    gtk_widget_set_margin_start(toolbar, 5);
+    gtk_widget_set_margin_end(toolbar, 5);
+    gtk_widget_set_margin_top(toolbar, 5);
+    gtk_widget_set_margin_bottom(toolbar, 5);
+    
+    GtkWidget *back_btn = gtk_button_new_from_icon_name("go-previous");
+    gtk_box_append(GTK_BOX(toolbar), back_btn);
+    
+    GtkWidget *forward_btn = gtk_button_new_from_icon_name("go-next");
+    gtk_box_append(GTK_BOX(toolbar), forward_btn);
+
+    GtkWidget *separator = gtk_separator_new(GTK_ORIENTATION_VERTICAL);
+    gtk_box_append(GTK_BOX(toolbar), separator);
+    
+    GtkWidget *actions_btn = gtk_menu_button_new();
+    gtk_menu_button_set_label(GTK_MENU_BUTTON(actions_btn), "Actions");
+    GMenu *actions_menu = g_menu_new();
+    g_menu_append(actions_menu, "Open Saved Log...", "app.open_log");
+    g_menu_append(actions_menu, "Create Custom View...", "app.create_view");
+    g_menu_append(actions_menu, "Import Custom View...", "app.import_view");
+    gtk_menu_button_set_menu_model(GTK_MENU_BUTTON(actions_btn), G_MENU_MODEL(actions_menu));
+    gtk_box_append(GTK_BOX(toolbar), actions_btn);
+    
+    GtkWidget *refresh_btn = gtk_button_new_from_icon_name("view-refresh");
+    gtk_box_append(GTK_BOX(toolbar), refresh_btn);
+    g_signal_connect_swapped(refresh_btn, "clicked", G_CALLBACK(on_refresh_action), data->app);
+    
+    g_object_unref(actions_menu);
+    
+    return toolbar;
+}
+
+static GtkWidget *create_sidebar(EventViewerData *data) {
+    GtkWidget *scrolled = gtk_scrolled_window_new();
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    gtk_widget_set_vexpand(scrolled, TRUE);
+    
+    data->tree_store = gtk_tree_store_new(2, G_TYPE_STRING, G_TYPE_BOOLEAN);
+    data->tree_view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(data->tree_store));
+    gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(data->tree_view), FALSE);
+    
+    GtkCellRenderer *text_renderer = gtk_cell_renderer_text_new();
+    GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes("", text_renderer, "text", 0, NULL);
+    gtk_tree_view_append_column(GTK_TREE_VIEW(data->tree_view), column);
+    
+    GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(data->tree_view));
+    g_signal_connect(selection, "changed", G_CALLBACK(on_tree_selection_changed), data);
+    
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), data->tree_view);
+    return scrolled;
+}
+
+static GtkWidget *create_event_details_view(EventViewerData *data) {
+    GtkWidget *scrolled = gtk_scrolled_window_new();
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), 
+                                   GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    gtk_widget_set_vexpand(scrolled, TRUE);
+    
+    data->event_details_store = gtk_list_store_new(5, 
+        G_TYPE_STRING,  // Level
+        G_TYPE_STRING,  // Date/Time
+        G_TYPE_STRING,  // Source
+        G_TYPE_INT,     // Event ID
+        G_TYPE_STRING   // Task Category
+    );
+    
+    data->event_details_view = gtk_tree_view_new_with_model(
+        GTK_TREE_MODEL(data->event_details_store)
+    );
+    
+    const char *columns[] = {"Level", "Date and Time", "Source", "Event ID", "Task Category"};
+    
+    for (int i = 0; i < 5; i++) {
+        GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
+        if (i == 3) {
+            g_object_set(renderer, "xalign", 1.0, NULL);
+        }
+        
+        GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(
+            columns[i], renderer, "text", i, NULL
+        );
+        gtk_tree_view_column_set_resizable(column, TRUE);
+        gtk_tree_view_column_set_sort_column_id(column, i);
+        gtk_tree_view_append_column(GTK_TREE_VIEW(data->event_details_view), column);
+    }
+    
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), data->event_details_view);
+    return scrolled;
+}
+
+static GtkWidget *create_content_area(EventViewerData *data) {
+    data->notebook = gtk_notebook_new();
+    gtk_widget_set_vexpand(data->notebook, TRUE);
+    
+    GtkWidget *overview_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_widget_set_margin_start(overview_box, 10);
+    gtk_widget_set_margin_end(overview_box, 10);
+    gtk_widget_set_margin_top(overview_box, 10);
+    gtk_widget_set_margin_bottom(overview_box, 10);
+    
+    GtkWidget *header_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_margin_bottom(header_box, 10);
+    
+    GtkWidget *title_label = gtk_label_new(NULL);
+    gtk_label_set_markup(GTK_LABEL(title_label), "<b>Overview and Summary</b>");
+    gtk_widget_set_halign(title_label, GTK_ALIGN_START);
+    gtk_box_append(GTK_BOX(header_box), title_label);
+    
+    char time_buffer[80];
+    time_t rawtime = time(NULL);
+    struct tm *timeinfo = localtime(&rawtime);
+    strftime(time_buffer, sizeof(time_buffer), "Last refreshed: %m/%d/%Y %I:%M:%S %p", timeinfo);
+    
+    GtkWidget *refresh_label = gtk_label_new(time_buffer);
+    gtk_widget_set_halign(refresh_label, GTK_ALIGN_END);
+    gtk_widget_set_hexpand(refresh_label, TRUE);
+    gtk_box_append(GTK_BOX(header_box), refresh_label);
+    gtk_box_append(GTK_BOX(overview_box), header_box);
+    
+    GtkWidget *desc_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_set_margin_bottom(desc_box, 20);
+    
+    GtkWidget *info_icon = gtk_image_new_from_icon_name("dialog-information");
+    gtk_box_append(GTK_BOX(desc_box), info_icon);
+    
+    GtkWidget *desc_label = gtk_label_new("To view events that have occurred on your computer, select the appropriate source, log or custom view node in the console tree.");
+    gtk_label_set_wrap(GTK_LABEL(desc_label), TRUE);
+    gtk_widget_set_margin_start(desc_label, 10);
+    gtk_box_append(GTK_BOX(desc_box), desc_label);
+    gtk_box_append(GTK_BOX(overview_box), desc_box);
+    
+    gtk_box_append(GTK_BOX(overview_box), create_admin_events_table(data));
+    gtk_box_append(GTK_BOX(overview_box), create_recent_nodes_table(data));
+    gtk_box_append(GTK_BOX(overview_box), create_log_summary_table(data));
+    
+    gtk_notebook_append_page(GTK_NOTEBOOK(data->notebook), overview_box, gtk_label_new("Overview"));
+    
+    GtkWidget *details_page = create_event_details_view(data);
+    gtk_notebook_append_page(GTK_NOTEBOOK(data->notebook), details_page, gtk_label_new("Events"));
+    
+    return data->notebook;
+}
+
+static GtkWidget *create_admin_events_table(EventViewerData *data) {
+    GtkWidget *frame = gtk_frame_new("Summary of Administrative Events");
+    gtk_widget_set_margin_bottom(frame, 20);
+    
+    GtkWidget *scrolled = gtk_scrolled_window_new();
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(scrolled), 150);
+    
+    data->admin_store = gtk_list_store_new(7, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_INT, G_TYPE_INT, G_TYPE_INT);
+    data->admin_tree_view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(data->admin_store));
+    
+    const char *column_titles[] = {"Event Type", "Event ID", "Source", "Log", "Last hour", "24 hours", "7 days"};
+    
+    for (int i = 0; i < 7; i++) {
+        GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
+        if (i >= 4) g_object_set(renderer, "xalign", 1.0, NULL);
+        
+        GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(column_titles[i], renderer, "text", i, NULL);
+        gtk_tree_view_column_set_resizable(column, TRUE);
+        gtk_tree_view_append_column(GTK_TREE_VIEW(data->admin_tree_view), column);
+    }
+    
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), data->admin_tree_view);
+    gtk_frame_set_child(GTK_FRAME(frame), scrolled);
+    return frame;
+}
+
+static GtkWidget *create_recent_nodes_table(EventViewerData *data) {
+    GtkWidget *frame = gtk_frame_new("Recently Viewed Nodes");
+    gtk_widget_set_margin_bottom(frame, 20);
+    
+    GtkWidget *scrolled = gtk_scrolled_window_new();
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(scrolled), 100);
+    
+    data->recent_store = gtk_list_store_new(4, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+    data->recent_tree_view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(data->recent_store));
+    
+    const char *recent_columns[] = {"Name", "Description", "Modified", "Created"};
+    
+    for (int i = 0; i < 4; i++) {
+        GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
+        GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(recent_columns[i], renderer, "text", i, NULL);
+        gtk_tree_view_column_set_resizable(column, TRUE);
+        gtk_tree_view_append_column(GTK_TREE_VIEW(data->recent_tree_view), column);
+    }
+    
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), data->recent_tree_view);
+    gtk_frame_set_child(GTK_FRAME(frame), scrolled);
+    return frame;
+}
+
+static GtkWidget *create_log_summary_table(EventViewerData *data) {
+    GtkWidget *frame = gtk_frame_new("Log Summary");
+    
+    GtkWidget *scrolled = gtk_scrolled_window_new();
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(scrolled), 200);
+    
+    data->log_store = gtk_list_store_new(5, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+    data->log_tree_view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(data->log_store));
+    
+    const char *log_columns[] = {"Log Name", "Size (Current/Maximum)", "Modified", "Enabled", "Retention Policy"};
+    
+    for (int i = 0; i < 5; i++) {
+        GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
+        GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(log_columns[i], renderer, "text", i, NULL);
+        gtk_tree_view_column_set_resizable(column, TRUE);
+        gtk_tree_view_append_column(GTK_TREE_VIEW(data->log_tree_view), column);
+    }
+    
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), data->log_tree_view);
+    gtk_frame_set_child(GTK_FRAME(frame), scrolled);
+    return frame;
+}
+
+static void populate_tree_data(EventViewerData *data) {
+    GtkTreeIter root, child, subchild;
+    
+    gtk_tree_store_append(data->tree_store, &root, NULL);
+    gtk_tree_store_set(data->tree_store, &root, 0, "Event Viewer (Local)", 1, TRUE, -1);
+    
+    gtk_tree_store_append(data->tree_store, &child, &root);
+    gtk_tree_store_set(data->tree_store, &child, 0, "Custom Views", 1, TRUE, -1);
+    
+    gtk_tree_store_append(data->tree_store, &subchild, &child);
+    gtk_tree_store_set(data->tree_store, &subchild, 0, "Server Roles", 1, FALSE, -1);
+    
+    gtk_tree_store_append(data->tree_store, &subchild, &child);
+    gtk_tree_store_set(data->tree_store, &subchild, 0, "Administrative Events", 1, FALSE, -1);
+    
+    gtk_tree_store_append(data->tree_store, &child, &root);
+    gtk_tree_store_set(data->tree_store, &child, 0, "Windows Logs", 1, TRUE, -1);
+    
+    const char *windows_logs[] = {"Application", "Security", "Setup", "System", "Forwarded Events"};
+    for (int i = 0; i < 5; i++) {
+        gtk_tree_store_append(data->tree_store, &subchild, &child);
+        gtk_tree_store_set(data->tree_store, &subchild, 0, windows_logs[i], 1, FALSE, -1);
+    }
+    
+    gtk_tree_store_append(data->tree_store, &child, &root);
+    gtk_tree_store_set(data->tree_store, &child, 0, "Applications and Services Logs", 1, TRUE, -1);
+    
+    gtk_tree_store_append(data->tree_store, &subchild, &child);
+    gtk_tree_store_set(data->tree_store, &subchild, 0, "Hardware Events", 1, FALSE, -1);
+    
+    GtkTreePath *path = gtk_tree_path_new_from_string("0");
+    gtk_tree_view_expand_row(GTK_TREE_VIEW(data->tree_view), path, FALSE);
+    gtk_tree_path_free(path);
+}
+
+static void populate_table_data(EventViewerData *data) {
+    GtkTreeIter iter;
+    
+#ifdef _WIN32
+    EventStatistics stats_1h = get_event_statistics(L"Application", 1);
+    EventStatistics stats_24h = get_event_statistics(L"Application", 24);
+    EventStatistics stats_7d = get_event_statistics(L"Application", 168);
+    
+    struct {
+        const char *event_type;
+        int last_hour, hours_24, days_7;
+    } events_data[] = {
+        {"Critical", stats_1h.critical_count, stats_24h.critical_count, stats_7d.critical_count},
+        {"Error", stats_1h.error_count, stats_24h.error_count, stats_7d.error_count},
+        {"Warning", stats_1h.warning_count, stats_24h.warning_count, stats_7d.warning_count},
+        {"Information", stats_1h.information_count, stats_24h.information_count, stats_7d.information_count},
+        {"Audit Success", stats_1h.audit_success_count, stats_24h.audit_success_count, stats_7d.audit_success_count},
+        {"Audit Failure", stats_1h.audit_failure_count, stats_24h.audit_failure_count, stats_7d.audit_failure_count}
+    };
+    
+    for (int i = 0; i < 6; i++) {
+        gtk_list_store_append(data->admin_store, &iter);
+        gtk_list_store_set(data->admin_store, &iter,
+            0, events_data[i].event_type, 
+            1, "-",
+            2, "-", 
+            3, "-",
+            4, events_data[i].last_hour, 
+            5, events_data[i].hours_24,
+            6, events_data[i].days_7, -1);
+    }
+
+#endif
+    
+    struct {
+        const char *log_name, *size, *modified, *enabled, *retention;
+    } log_data[] = {
+        {"Windows PowerShell", "15.00 MB/...", "8/20/2025 1:27:55 AM", "Enabled", "Overwrite events as nece..."},
+        {"Visual Studio", "68 KB/1.00...", "8/9/2025 1:21:39 PM", "Enabled", "Overwrite events as nece..."},
+        {"System", "20.00 MB/...", "8/20/2025 1:27:47 AM", "Enabled", "Overwrite events as nece..."},
+        {"Security", "20.00 MB/...", "8/20/2025 1:24:04 AM", "Enabled", "Overwrite events as nece..."},
+        {"OneApp_IGCC", "1.00 MB/1...", "8/20/2025 1:23:25 AM", "Enabled", "Overwrite events as nece..."}
+    };
+    
+    for (int i = 0; i < 5; i++) {
+        gtk_list_store_append(data->log_store, &iter);
+        gtk_list_store_set(data->log_store, &iter,
+            0, log_data[i].log_name, 1, log_data[i].size,
+            2, log_data[i].modified, 3, log_data[i].enabled,
+            4, log_data[i].retention, -1);
+    }
+}
+
+static void load_log_events(EventViewerData *data, const char *log_name) {
+    gtk_list_store_clear(data->event_details_store);
+    
+#ifdef _WIN32
+    if (data->current_log_handle) {
+        close_event_log(data->current_log_handle);
+        data->current_log_handle = NULL;
+    }
+    
+    wchar_t wlog_name[256];
+    
+    if (strcmp(log_name, "Application") == 0) {
+        wcscpy(wlog_name, L"Application");
+    } else if (strcmp(log_name, "System") == 0) {
+        wcscpy(wlog_name, L"System");
+    } else if (strcmp(log_name, "Security") == 0) {
+        wcscpy(wlog_name, L"Security");
+    } else if (strcmp(log_name, "Setup") == 0) {
+        wcscpy(wlog_name, L"Setup");
+    } else {
+        g_print("Unknown log: %s\n", log_name);
+        return;
+    }
+    
+    // Open the event log
+    data->current_log_handle = open_event_log(wlog_name, 24);
+
+    
+    if (data->current_log_handle) {
+        EventRecord *events = NULL;
+        int count = read_events(data->current_log_handle, &events, 1000);
+        
+        g_print("Loaded %d events from %s\n", count, log_name);
+        
+        // Populate tree view
+        GtkTreeIter iter;
+        for (int i = 0; i < count; i++) {
+            gtk_list_store_append(data->event_details_store, &iter);
+            gtk_list_store_set(data->event_details_store, &iter,
+                0, get_event_level_string(events[i].level),
+                1, events[i].timestamp ? events[i].timestamp : "N/A",
+                2, events[i].source ? events[i].source : "N/A",
+                3, events[i].event_id,
+                4, "General",
+                -1);
+        }
+        
+        // Free events
+        for (int i = 0; i < count; i++) {
+            free_event_record(&events[i]);
+        }
+        free(events);
+        
+        if (data->current_log_name) free(data->current_log_name);
+        data->current_log_name = strdup(log_name);
+    } else {
+        g_print("Failed to open log: %s\n", log_name);
+        
+        // Show error message
+        GtkWidget *dialog = gtk_message_dialog_new(
+            GTK_WINDOW(data->window),
+            GTK_DIALOG_MODAL,
+            GTK_MESSAGE_ERROR,
+            GTK_BUTTONS_OK,
+            "Failed to open event log: %s", log_name
+        );
+        
+        if (strcmp(log_name, "Security") == 0 && !IsRunningAsAdmin()) {
+            gtk_message_dialog_format_secondary_text(
+                GTK_MESSAGE_DIALOG(dialog),
+                "Administrator privileges are required to access the Security log."
+            );
+        }
+        
+        gtk_window_present(GTK_WINDOW(dialog));
+        g_signal_connect(dialog, "response", G_CALLBACK(gtk_window_destroy), NULL);
+    }
+#endif
+}
+
+static void on_tree_selection_changed(GtkTreeSelection *selection, gpointer user_data) {
+    EventViewerData *data = (EventViewerData *)user_data;
+    GtkTreeModel *model;
+    GtkTreeIter iter;
+    gchar *name;
+    
+    if (gtk_tree_selection_get_selected(selection, &model, &iter)) {
+        gtk_tree_model_get(model, &iter, 0, &name, -1);
+        g_print("Selected: %s\n", name);
+        
+        // Check if this is a Windows log
+        if (strcmp(name, "Application") == 0 || 
+            strcmp(name, "System") == 0 || 
+            strcmp(name, "Security") == 0 ||
+            strcmp(name, "Setup") == 0) {
+            
+            // Switch to event details tab
+            gtk_notebook_set_current_page(GTK_NOTEBOOK(data->notebook), 1);
+            
+            // Load events for this log
+            load_log_events(data, name);
+        } else {
+            // Switch back to overview for other selections
+            gtk_notebook_set_current_page(GTK_NOTEBOOK(data->notebook), 0);
+        }
+        
+        g_free(name);
+    }
+}
+
+static void on_quit_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+    GtkApplication *app = GTK_APPLICATION(user_data);
+    g_application_quit(G_APPLICATION(app));
+}
+
+static void on_about_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+    GtkApplication *app = GTK_APPLICATION(user_data);
+    GtkWindow *parent = gtk_application_get_active_window(app);
+    
+    GtkWidget *dialog = gtk_about_dialog_new();
+    gtk_about_dialog_set_program_name(GTK_ABOUT_DIALOG(dialog), "Event Viewer");
+    gtk_about_dialog_set_version(GTK_ABOUT_DIALOG(dialog), "1.0");
+    gtk_about_dialog_set_comments(GTK_ABOUT_DIALOG(dialog), "A GTK4 implementation of Windows Event Viewer");
+    gtk_about_dialog_set_website(GTK_ABOUT_DIALOG(dialog), "https://example.com");
+    
+    gtk_window_set_transient_for(GTK_WINDOW(dialog), parent);
+    gtk_window_present(GTK_WINDOW(dialog));
+}
+
+static void on_refresh_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+    
+}
+
+
+
+static void on_open_log_response(GtkDialog *dialog, int response_id, gpointer user_data) {
+    EventViewerData *data = (EventViewerData *)user_data;
+
+    if (response_id == GTK_RESPONSE_ACCEPT) {
+        GFile *file = gtk_file_chooser_get_file(GTK_FILE_CHOOSER(dialog));
+        char *filename = g_file_get_path(file);
+        g_object_unref(file);
+
+        // Clear current view
+        gtk_list_store_clear(data->event_details_store);
+
+        FILE *fp = fopen(filename, "r");
+        if (fp) {
+            char line[4096];
+            int line_no = 0;
+            while (fgets(line, sizeof(line), fp)) {
+                line_no++;
+                if (line_no == 1) continue; // Skip header
+
+                char level[128], datetime[128], source[256], task[128];
+                int event_id;
+
+                if (sscanf(line, "\"%127[^\"]\",\"%127[^\"]\",\"%255[^\"]\",%d,\"%127[^\"]\"", 
+                           level, datetime, source, &event_id, task) == 5) {
+
+                    GtkTreeIter iter;
+                    gtk_list_store_append(data->event_details_store, &iter);
+                    gtk_list_store_set(data->event_details_store, &iter,
+                        0, level,
+                        1, datetime,
+                        2, source,
+                        3, event_id,
+                        4, task,
+                        -1);
+                }
+            }
+            fclose(fp);
+        }
+
+        g_free(filename);
+
+        // Switch to Events tab
+        gtk_notebook_set_current_page(GTK_NOTEBOOK(data->notebook), 1);
+    }
+
+    gtk_window_destroy(GTK_WINDOW(dialog));
+}
+
+static void on_open_log_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+    EventViewerData *data = g_object_get_data(G_OBJECT(gtk_application_get_active_window(GTK_APPLICATION(user_data))), "event_viewer_data");
+    GtkWindow *parent = GTK_WINDOW(data->window);
+
+    GtkWidget *dialog = gtk_file_chooser_dialog_new(
+        "Open Log File",
+        parent,
+        GTK_FILE_CHOOSER_ACTION_OPEN,
+        "Cancel", GTK_RESPONSE_CANCEL,
+        "Open", GTK_RESPONSE_ACCEPT,
+        NULL
+    );
+
+    GtkFileFilter *filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "CSV Files");
+    gtk_file_filter_add_pattern(filter, "*.csv");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+
+    g_signal_connect(dialog, "response", G_CALLBACK(on_open_log_response), data);
+    gtk_window_present(GTK_WINDOW(dialog));
+}
+
+
+static void on_save_log_response(GtkDialog *dialog, int response_id, gpointer user_data) {
+    EventViewerData *data = (EventViewerData *)user_data;
+
+    if (response_id == GTK_RESPONSE_ACCEPT) {
+        GFile *file = gtk_file_chooser_get_file(GTK_FILE_CHOOSER(dialog));
+        char *filename = g_file_get_path(file);
+        g_object_unref(file);
+
+        FILE *fp = fopen(filename, "w");
+        if (fp) {
+            // Write CSV header
+            fprintf(fp, "Level,Date/Time,Source,Event ID,Task Category\n");
+
+            GtkTreeIter iter;
+            gboolean valid = gtk_tree_model_get_iter_first(GTK_TREE_MODEL(data->event_details_store), &iter);
+            while (valid) {
+                char *level, *datetime, *source, *task;
+                int event_id;
+
+                gtk_tree_model_get(GTK_TREE_MODEL(data->event_details_store), &iter,
+                    0, &level,
+                    1, &datetime,
+                    2, &source,
+                    3, &event_id,
+                    4, &task,
+                    -1);
+
+                fprintf(fp, "\"%s\",\"%s\",\"%s\",%d,\"%s\"\n", level, datetime, source, event_id, task);
+
+                g_free(level);
+                g_free(datetime);
+                g_free(source);
+                g_free(task);
+
+                valid = gtk_tree_model_iter_next(GTK_TREE_MODEL(data->event_details_store), &iter);
+            }
+
+            fclose(fp);
+        }
+
+        g_free(filename);
+    }
+
+    gtk_window_destroy(GTK_WINDOW(dialog));
+}
+
+static void on_save_log_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+    EventViewerData *data = g_object_get_data(G_OBJECT(gtk_application_get_active_window(GTK_APPLICATION(user_data))), "event_viewer_data");
+    GtkWindow *parent = GTK_WINDOW(data->window);
+
+    GtkWidget *dialog = gtk_file_chooser_dialog_new(
+        "Save Log File",
+        parent,
+        GTK_FILE_CHOOSER_ACTION_SAVE,
+        "Cancel", GTK_RESPONSE_CANCEL,
+        "Save", GTK_RESPONSE_ACCEPT,
+        NULL
+    );
+
+    GtkFileFilter *filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "CSV Files");
+    gtk_file_filter_add_pattern(filter, "*.csv");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+
+    g_signal_connect(dialog, "response", G_CALLBACK(on_save_log_response), data);
+    gtk_window_present(GTK_WINDOW(dialog));
+}
+static void on_create_view_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+    GtkApplication *app = GTK_APPLICATION(user_data);
+    GtkWindow *parent = gtk_application_get_active_window(app);
+    
+    GtkWidget *dialog = gtk_message_dialog_new(
+        parent,
+        GTK_DIALOG_MODAL,
+        GTK_MESSAGE_INFO,
+        GTK_BUTTONS_OK,
+        "Create Custom View"
+    );
+    gtk_message_dialog_format_secondary_text(
+        GTK_MESSAGE_DIALOG(dialog),
+        "Custom view creation will be implemented in a future version."
+    );
+    gtk_window_present(GTK_WINDOW(dialog));
+    g_signal_connect(dialog, "response", G_CALLBACK(gtk_window_destroy), NULL);
+}
+
+static void on_import_view_action(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+    GtkApplication *app = GTK_APPLICATION(user_data);
+    GtkWindow *parent = gtk_application_get_active_window(app);
+    
+    GtkWidget *dialog = gtk_file_chooser_dialog_new("Import Custom View", parent, GTK_FILE_CHOOSER_ACTION_OPEN,
+        "Cancel", GTK_RESPONSE_CANCEL, "Import", GTK_RESPONSE_ACCEPT, NULL);
+    
+    GtkFileFilter *filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "Custom View Files");
+    gtk_file_filter_add_pattern(filter, "*.xml");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+    
+    gtk_window_present(GTK_WINDOW(dialog));
+}
