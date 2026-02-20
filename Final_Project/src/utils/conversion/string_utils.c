@@ -6,7 +6,7 @@
  * This adapter is necessary because Windows Event Log API returns
  * wide strings while GTK4 widgets expect UTF-8.
  *
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

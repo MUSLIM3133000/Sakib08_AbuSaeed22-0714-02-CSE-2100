@@ -6,7 +6,7 @@
  * EventRecord (single event), EventStatistics (aggregated counts),
  * and event level constants.
  *
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

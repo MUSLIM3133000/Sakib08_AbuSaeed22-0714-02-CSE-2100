@@ -5,7 +5,7 @@
  * Provides direct access to Windows Event Log reading functionality.
  * No abstraction layer - direct implementation.
  *
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

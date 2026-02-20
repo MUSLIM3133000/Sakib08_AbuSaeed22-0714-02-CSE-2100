@@ -5,7 +5,7 @@
  * Constructs File, Action, View, and Help menus and wires them
  * to GAction entries registered on the GtkApplication.
  *
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

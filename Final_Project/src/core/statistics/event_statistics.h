@@ -5,7 +5,7 @@
  * Provides aggregated event counts by severity level by directly
  * calling Windows Event Log functions.
  *
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

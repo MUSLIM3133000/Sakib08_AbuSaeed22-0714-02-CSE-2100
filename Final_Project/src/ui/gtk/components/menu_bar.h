@@ -6,7 +6,7 @@
  * Isolated here so it can be modified without touching the
  * main window layout.
  *
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

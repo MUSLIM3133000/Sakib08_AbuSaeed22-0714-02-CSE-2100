@@ -2,7 +2,7 @@
  * @file ui/gtk/components/sidebar.h
  * @brief GTK4 sidebar tree-view component
  *
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

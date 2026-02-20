@@ -4,7 +4,7 @@
  *
  * Creates and displays the main window with all UI components.
  *
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

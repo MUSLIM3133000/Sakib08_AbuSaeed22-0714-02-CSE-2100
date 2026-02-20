@@ -5,7 +5,7 @@
  * Reads CSV files previously exported by CsvExporter and rebuilds
  * an EventRecord array. Separated from the exporter following SRP.
  *
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

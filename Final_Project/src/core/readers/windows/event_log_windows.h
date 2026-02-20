@@ -5,7 +5,7 @@
  * Direct implementation for reading Windows Event Logs using winevt.h API.
  *
  * @platform Windows Vista and later (requires wevtapi.dll)
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

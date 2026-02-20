@@ -2,7 +2,7 @@
  * @file ui/gtk/components/tool_bar.c
  * @brief GTK4 toolbar component implementation
  *
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

@@ -5,7 +5,7 @@
  * Provides the level-to-string conversion and memory cleanup
  * for EventRecord structs. Pure logic with no platform dependencies.
  *
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

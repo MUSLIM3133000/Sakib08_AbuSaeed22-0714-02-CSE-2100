@@ -5,7 +5,7 @@
  * Populates GTK tree/list stores from event data.
  * Calls Windows Event Log API directly.
  *
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

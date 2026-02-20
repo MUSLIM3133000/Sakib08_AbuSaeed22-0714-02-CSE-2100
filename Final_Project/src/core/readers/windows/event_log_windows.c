@@ -5,7 +5,7 @@
  * Direct implementation using EvtQuery / EvtNext / EvtRender from winevt.h.
  *
  * @platform Windows Vista and later
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

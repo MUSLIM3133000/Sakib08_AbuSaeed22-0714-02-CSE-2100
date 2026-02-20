@@ -5,7 +5,7 @@
  * All on_* signal handlers and GAction callbacks are declared here.
  * Following GTK naming conventions: on_<object>_<signal>.
  *
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

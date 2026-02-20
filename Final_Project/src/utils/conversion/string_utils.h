@@ -6,7 +6,7 @@
  * strings (wchar_t) and UTF-8 strings required by GTK4.
  *
  * @platform Windows (uses WideCharToMultiByte)
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

@@ -2,7 +2,7 @@
  * @file ui/gtk/windows/main_window.h
  * @brief Main application window creation
  *
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

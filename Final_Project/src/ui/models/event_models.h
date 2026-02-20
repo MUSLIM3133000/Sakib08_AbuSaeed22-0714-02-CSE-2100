@@ -6,7 +6,7 @@
  * stores. No Windows API calls appear here; data comes in as plain
  * EventRecord arrays.
  *
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

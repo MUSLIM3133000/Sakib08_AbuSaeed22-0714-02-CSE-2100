@@ -8,7 +8,7 @@
  * 3. Converting UTC → local time via SystemTimeToTzSpecificLocalTime
  * 4. Formatting with sprintf
  *
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

@@ -6,7 +6,7 @@
  * starts the GTK main loop. All other logic is handled by the
  * respective modules under ui/, core/, data/, and utils/.
  *
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

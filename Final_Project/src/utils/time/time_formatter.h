@@ -6,7 +6,7 @@
  * for display in the event viewer UI.
  *
  * @platform Windows (uses FileTimeToSystemTime, SystemTimeToTzSpecificLocalTime)
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

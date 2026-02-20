@@ -5,7 +5,7 @@
  * Contains all application state, GTK widget references, and data models
  * in a single unified structure.
  *
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

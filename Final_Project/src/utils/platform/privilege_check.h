@@ -6,7 +6,7 @@
  * to utils/platform/ — no other module needs to know about SIDs.
  *
  * @platform Windows (uses AllocateAndInitializeSid, CheckTokenMembership)
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

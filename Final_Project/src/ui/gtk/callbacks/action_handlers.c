@@ -4,7 +4,7 @@
  *
  * Contains all menu actions and signal handlers.
  *
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */

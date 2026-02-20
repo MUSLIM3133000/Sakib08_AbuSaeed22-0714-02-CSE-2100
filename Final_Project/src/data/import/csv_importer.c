@@ -6,7 +6,7 @@
  * EventRecord structs. Handles quoted fields to support messages
  * that contain commas.
  *
- * @author Team Name
+ * @author EventLogReader Team
  * @date February 2026
  * @version 2.0
  */
