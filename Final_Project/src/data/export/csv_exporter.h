@@ -1,22 +1,26 @@
+/**
+ * @file data/export/csv_exporter.h
+ * @brief CSV export functionality for event log records
+ *
+ * Direct CSV export implementation without strategy pattern abstraction.
+ *
+ * @author Team Name
+ * @date February 2026
+ * @version 2.0
+ */
+
 #ifndef CSV_EXPORTER_H
 #define CSV_EXPORTER_H
 
 #include "core/types/event_record.h"
 
-typedef enum {
-    EXPORT_FORMAT_CSV  = 0,
-    EXPORT_FORMAT_XML  = 1,
-    EXPORT_FORMAT_JSON = 2
-} ExportFormat;
+/**
+ * @brief Writes events to a CSV file with header row
+ * @param filename  Destination file path
+ * @param events    Array of EventRecord
+ * @param count     Number of records in array
+ * @return 1 on success, 0 if the file could not be opened
+ */
+int CsvExporter_Export(const char *filename, EventRecord *events, int count);
 
-typedef struct {
-    const char *name;
-    const char *extension;
-    int (*export)(const char *filename, EventRecord *events, int count);
-} ExportStrategy;
-
-int export_csv(const char *filename, EventRecord *events, int count);
-extern ExportStrategy g_csvExportStrategy;
-ExportStrategy *ExportStrategyFactory_Create(ExportFormat format);
-
-#endif
+#endif /* CSV_EXPORTER_H */

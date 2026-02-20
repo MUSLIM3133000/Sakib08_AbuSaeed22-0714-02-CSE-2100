@@ -1,3 +1,15 @@
+/**
+ * @file ui/models/event_models.c
+ * @brief GTK data model population implementation
+ *
+ * Populates GTK tree/list stores from event data.
+ * Calls Windows Event Log API directly.
+ *
+ * @author Team Name
+ * @date February 2026
+ * @version 2.0
+ */
+
 #include "event_models.h"
 #include <stdlib.h>
 #include <string.h>
@@ -9,60 +21,58 @@
 #include "utils/platform/privilege_check.h"
 #endif
 
-void fill_tree(AppData *data) {
+void EventModels_PopulateTree(EventViewerContext *ctx) {
     GtkTreeIter root, child, subchild;
 
-    gtk_tree_store_append(data->models.tree_store, &root, NULL);
-    gtk_tree_store_set(data->models.tree_store, &root,
+    gtk_tree_store_append(ctx->tree_store, &root, NULL);
+    gtk_tree_store_set(ctx->tree_store, &root,
                        0, "Event Viewer (Local)", 1, TRUE, -1);
 
-    gtk_tree_store_append(data->models.tree_store, &child, &root);
-    gtk_tree_store_set(data->models.tree_store, &child,
+    gtk_tree_store_append(ctx->tree_store, &child, &root);
+    gtk_tree_store_set(ctx->tree_store, &child,
                        0, "Custom Views", 1, TRUE, -1);
 
-    gtk_tree_store_append(data->models.tree_store, &subchild, &child);
-    gtk_tree_store_set(data->models.tree_store, &subchild,
+    gtk_tree_store_append(ctx->tree_store, &subchild, &child);
+    gtk_tree_store_set(ctx->tree_store, &subchild,
                        0, "Server Roles", 1, FALSE, -1);
 
-    gtk_tree_store_append(data->models.tree_store, &subchild, &child);
-    gtk_tree_store_set(data->models.tree_store, &subchild,
+    gtk_tree_store_append(ctx->tree_store, &subchild, &child);
+    gtk_tree_store_set(ctx->tree_store, &subchild,
                        0, "Administrative Events", 1, FALSE, -1);
 
-    gtk_tree_store_append(data->models.tree_store, &child, &root);
-    gtk_tree_store_set(data->models.tree_store, &child,
+    gtk_tree_store_append(ctx->tree_store, &child, &root);
+    gtk_tree_store_set(ctx->tree_store, &child,
                        0, "Windows Logs", 1, TRUE, -1);
 
     const char *windowsLogs[] = {
         "Application", "Security", "Setup", "System", "Forwarded Events"
     };
     for (int i = 0; i < 5; i++) {
-        gtk_tree_store_append(data->models.tree_store, &subchild, &child);
-        gtk_tree_store_set(data->models.tree_store, &subchild,
+        gtk_tree_store_append(ctx->tree_store, &subchild, &child);
+        gtk_tree_store_set(ctx->tree_store, &subchild,
                            0, windowsLogs[i], 1, FALSE, -1);
     }
 
-    gtk_tree_store_append(data->models.tree_store, &child, &root);
-    gtk_tree_store_set(data->models.tree_store, &child,
+    gtk_tree_store_append(ctx->tree_store, &child, &root);
+    gtk_tree_store_set(ctx->tree_store, &child,
                        0, "Applications and Services Logs", 1, TRUE, -1);
 
-    gtk_tree_store_append(data->models.tree_store, &subchild, &child);
-    gtk_tree_store_set(data->models.tree_store, &subchild,
+    gtk_tree_store_append(ctx->tree_store, &subchild, &child);
+    gtk_tree_store_set(ctx->tree_store, &subchild,
                        0, "Hardware Events", 1, FALSE, -1);
 
     GtkTreePath *path = gtk_tree_path_new_from_string("0");
-    gtk_tree_view_expand_row(GTK_TREE_VIEW(data->models.tree_view), path, FALSE);
+    gtk_tree_view_expand_row(GTK_TREE_VIEW(ctx->tree_view), path, FALSE);
     gtk_tree_path_free(path);
 }
 
-void fill_tables(AppData *data) {
+void EventModels_PopulateTables(EventViewerContext *ctx) {
     GtkTreeIter iter;
 
 #ifdef _WIN32
-    EventLogRepository *repo = &g_windowsRepository;
-
-    EventStatistics stats1h  = calc_stats(repo, L"Application", 1);
-    EventStatistics stats24h = calc_stats(repo, L"Application", 24);
-    EventStatistics stats7d  = calc_stats(repo, L"Application", 168);
+    EventStatistics stats1h  = EventStatistics_Calculate(L"Application", 1);
+    EventStatistics stats24h = EventStatistics_Calculate(L"Application", 24);
+    EventStatistics stats7d  = EventStatistics_Calculate(L"Application", 168);
 
     struct { const char *type; int h1, h24, d7; } eventsData[] = {
         {"Critical",      stats1h.critical_count,    stats24h.critical_count,    stats7d.critical_count},
@@ -74,8 +84,8 @@ void fill_tables(AppData *data) {
     };
 
     for (int i = 0; i < 6; i++) {
-        gtk_list_store_append(data->models.admin_store, &iter);
-        gtk_list_store_set(data->models.admin_store, &iter,
+        gtk_list_store_append(ctx->admin_store, &iter);
+        gtk_list_store_set(ctx->admin_store, &iter,
             0, eventsData[i].type,
             1, "-", 2, "-", 3, "-",
             4, eventsData[i].h1,
@@ -94,21 +104,21 @@ void fill_tables(AppData *data) {
     };
 
     for (int i = 0; i < 5; i++) {
-        gtk_list_store_append(data->models.log_store, &iter);
-        gtk_list_store_set(data->models.log_store, &iter,
+        gtk_list_store_append(ctx->log_store, &iter);
+        gtk_list_store_set(ctx->log_store, &iter,
             0, logData[i].name,    1, logData[i].size,
             2, logData[i].modified, 3, logData[i].enabled,
             4, logData[i].retention, -1);
     }
 }
 
-void fill_event_details(AppData *data, EventRecord *events, int count) {
+void EventModels_PopulateEventDetails(EventViewerContext *ctx, EventRecord *events, int count) {
     GtkTreeIter iter;
 
     for (int i = 0; i < count; i++) {
-        gtk_list_store_append(data->models.event_details_store, &iter);
-        gtk_list_store_set(data->models.event_details_store, &iter,
-            0, get_level_string(events[i].level),
+        gtk_list_store_append(ctx->event_details_store, &iter);
+        gtk_list_store_set(ctx->event_details_store, &iter,
+            0, EventRecord_GetLevelString(events[i].level),
             1, events[i].timestamp ? events[i].timestamp : "N/A",
             2, events[i].source    ? events[i].source    : "N/A",
             3, (int)events[i].event_id,
@@ -117,13 +127,13 @@ void fill_event_details(AppData *data, EventRecord *events, int count) {
     }
 }
 
-void load_log_events(AppData *data, const char *log_name) {
-    gtk_list_store_clear(data->models.event_details_store);
+void EventModels_LoadLogEvents(EventViewerContext *ctx, const char *log_name) {
+    gtk_list_store_clear(ctx->event_details_store);
 
 #ifdef _WIN32
-    if (data->state.current_log_handle) {
-        EvtClose(data->state.current_log_handle);
-        data->state.current_log_handle = NULL;
+    if (ctx->current_log_handle) {
+        EvtClose(ctx->current_log_handle);
+        ctx->current_log_handle = NULL;
     }
 
     wchar_t wlogName[256] = {0};
@@ -136,32 +146,31 @@ void load_log_events(AppData *data, const char *log_name) {
         return;
     }
 
-    EventLogRepository *repo = &g_windowsRepository;
-    void *handle = repo->open(wlogName, 24);
-    data->state.current_log_handle = (EVT_HANDLE)handle;
+    void *handle = EventLog_Windows_Open(wlogName, 24);
+    ctx->current_log_handle = (EVT_HANDLE)handle;
 
     if (handle) {
         EventRecord *events = NULL;
-        int count = repo->read(handle, &events, 1000);
+        int count = EventLog_Windows_Read(handle, &events, 1000);
         g_print("Loaded %d events from %s\n", count, log_name);
 
-        fill_event_details(data, events, count);
+        EventModels_PopulateEventDetails(ctx, events, count);
 
-        for (int i = 0; i < count; i++) free_event_record(&events[i]);
+        for (int i = 0; i < count; i++) EventRecord_Free(&events[i]);
         free(events);
 
-        free(data->state.current_log_name);
-        data->state.current_log_name = strdup(log_name);
+        free(ctx->current_log_name);
+        ctx->current_log_name = strdup(log_name);
 
     } else {
         g_print("Failed to open log: %s\n", log_name);
 
         GtkWidget *dialog = gtk_message_dialog_new(
-            GTK_WINDOW(data->window.window),
+            GTK_WINDOW(ctx->window),
             GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
             "Failed to open event log: %s", log_name);
 
-        if (strcmp(log_name, "Security") == 0 && !is_admin()) {
+        if (strcmp(log_name, "Security") == 0 && !PlatformUtils_IsRunningAsAdmin()) {
             gtk_message_dialog_format_secondary_text(
                 GTK_MESSAGE_DIALOG(dialog),
                 "Administrator privileges are required to access the Security log.");

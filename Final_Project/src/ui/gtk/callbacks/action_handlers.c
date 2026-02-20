@@ -1,3 +1,14 @@
+/**
+ * @file ui/gtk/callbacks/action_handlers.c
+ * @brief GTK4 action and signal callback implementations
+ *
+ * Contains all menu actions and signal handlers.
+ *
+ * @author Team Name
+ * @date February 2026
+ * @version 2.0
+ */
+
 #include "action_handlers.h"
 #include "ui/models/event_models.h"
 #include "data/export/csv_exporter.h"
@@ -5,12 +16,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-void on_quit(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+void ActionHandlers_OnQuit(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
     (void)action; (void)parameter;
     g_application_quit(G_APPLICATION(user_data));
 }
 
-void on_about(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+void ActionHandlers_OnAbout(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
     (void)action; (void)parameter;
     GtkApplication *app    = GTK_APPLICATION(user_data);
     GtkWindow      *parent = gtk_application_get_active_window(app);
@@ -25,19 +36,19 @@ void on_about(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
     gtk_window_present               (GTK_WINDOW(dialog));
 }
 
-void on_refresh(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+void ActionHandlers_OnRefresh(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
     (void)action; (void)parameter; (void)user_data;
 }
 
-void on_open_log_response(GtkDialog *dialog, int response_id, gpointer user_data) {
-    AppData *data = (AppData *)user_data;
+void ActionHandlers_OnOpenLogResponse(GtkDialog *dialog, int response_id, gpointer user_data) {
+    EventViewerContext *ctx = (EventViewerContext *)user_data;
 
     if (response_id == GTK_RESPONSE_ACCEPT) {
         GFile *file     = gtk_file_chooser_get_file(GTK_FILE_CHOOSER(dialog));
         char  *filename = g_file_get_path(file);
         g_object_unref(file);
 
-        gtk_list_store_clear(data->models.event_details_store);
+        gtk_list_store_clear(ctx->event_details_store);
 
         FILE *fp = fopen(filename, "r");
         if (fp) {
@@ -54,8 +65,8 @@ void on_open_log_response(GtkDialog *dialog, int response_id, gpointer user_data
                            "\"%127[^\"]\",\"%127[^\"]\",\"%255[^\"]\",%d,\"%127[^\"]\"",
                            levelStr, datetimeStr, sourceStr, &eventId, taskStr) == 5) {
                     GtkTreeIter iter;
-                    gtk_list_store_append(data->models.event_details_store, &iter);
-                    gtk_list_store_set(data->models.event_details_store, &iter,
+                    gtk_list_store_append(ctx->event_details_store, &iter);
+                    gtk_list_store_set(ctx->event_details_store, &iter,
                         0, levelStr, 1, datetimeStr,
                         2, sourceStr, 3, eventId,
                         4, taskStr, -1);
@@ -65,19 +76,19 @@ void on_open_log_response(GtkDialog *dialog, int response_id, gpointer user_data
         }
 
         g_free(filename);
-        gtk_notebook_set_current_page(GTK_NOTEBOOK(data->window.notebook), 1);
+        gtk_notebook_set_current_page(GTK_NOTEBOOK(ctx->notebook), 1);
     }
 
     gtk_window_destroy(GTK_WINDOW(dialog));
 }
 
-void on_open_log(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+void ActionHandlers_OnOpenLog(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
     (void)action; (void)parameter;
     GtkApplication     *app = GTK_APPLICATION(user_data);
-    AppData *data = g_object_get_data(
+    EventViewerContext *ctx = g_object_get_data(
                                   G_OBJECT(gtk_application_get_active_window(app)),
-                                  "event_viewer_data");
-    GtkWindow *parent = GTK_WINDOW(data->window.window);
+                                  "event_viewer_context");
+    GtkWindow *parent = GTK_WINDOW(ctx->window);
 
     GtkWidget *dialog = gtk_file_chooser_dialog_new(
         "Open Log File", parent, GTK_FILE_CHOOSER_ACTION_OPEN,
@@ -90,12 +101,12 @@ void on_open_log(GSimpleAction *action, GVariant *parameter, gpointer user_data)
     gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
 
     g_signal_connect(dialog, "response",
-                     G_CALLBACK(on_open_log_response), data);
+                     G_CALLBACK(ActionHandlers_OnOpenLogResponse), ctx);
     gtk_window_present(GTK_WINDOW(dialog));
 }
 
-void on_save_log_response(GtkDialog *dialog, int response_id, gpointer user_data) {
-    AppData *data = (AppData *)user_data;
+void ActionHandlers_OnSaveLogResponse(GtkDialog *dialog, int response_id, gpointer user_data) {
+    EventViewerContext *ctx = (EventViewerContext *)user_data;
 
     if (response_id == GTK_RESPONSE_ACCEPT) {
         GFile *file     = gtk_file_chooser_get_file(GTK_FILE_CHOOSER(dialog));
@@ -108,12 +119,12 @@ void on_save_log_response(GtkDialog *dialog, int response_id, gpointer user_data
 
             GtkTreeIter iter;
             gboolean valid = gtk_tree_model_get_iter_first(
-                                 GTK_TREE_MODEL(data->models.event_details_store), &iter);
+                                 GTK_TREE_MODEL(ctx->event_details_store), &iter);
             while (valid) {
                 char *level, *datetime, *source, *task;
                 int   eventId;
 
-                gtk_tree_model_get(GTK_TREE_MODEL(data->models.event_details_store), &iter,
+                gtk_tree_model_get(GTK_TREE_MODEL(ctx->event_details_store), &iter,
                     0, &level, 1, &datetime,
                     2, &source, 3, &eventId,
                     4, &task, -1);
@@ -125,7 +136,7 @@ void on_save_log_response(GtkDialog *dialog, int response_id, gpointer user_data
                 g_free(source); g_free(task);
 
                 valid = gtk_tree_model_iter_next(
-                            GTK_TREE_MODEL(data->models.event_details_store), &iter);
+                            GTK_TREE_MODEL(ctx->event_details_store), &iter);
             }
             fclose(fp);
         }
@@ -136,13 +147,13 @@ void on_save_log_response(GtkDialog *dialog, int response_id, gpointer user_data
     gtk_window_destroy(GTK_WINDOW(dialog));
 }
 
-void on_save_log(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+void ActionHandlers_OnSaveLog(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
     (void)action; (void)parameter;
     GtkApplication     *app = GTK_APPLICATION(user_data);
-    AppData *data = g_object_get_data(
+    EventViewerContext *ctx = g_object_get_data(
                                   G_OBJECT(gtk_application_get_active_window(app)),
-                                  "event_viewer_data");
-    GtkWindow *parent = GTK_WINDOW(data->window.window);
+                                  "event_viewer_context");
+    GtkWindow *parent = GTK_WINDOW(ctx->window);
 
     GtkWidget *dialog = gtk_file_chooser_dialog_new(
         "Save Log File", parent, GTK_FILE_CHOOSER_ACTION_SAVE,
@@ -155,11 +166,11 @@ void on_save_log(GSimpleAction *action, GVariant *parameter, gpointer user_data)
     gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
 
     g_signal_connect(dialog, "response",
-                     G_CALLBACK(on_save_log_response), data);
+                     G_CALLBACK(ActionHandlers_OnSaveLogResponse), ctx);
     gtk_window_present(GTK_WINDOW(dialog));
 }
 
-void on_create_view(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+void ActionHandlers_OnCreateView(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
     (void)action; (void)parameter;
     GtkApplication *app    = GTK_APPLICATION(user_data);
     GtkWindow      *parent = gtk_application_get_active_window(app);
@@ -173,7 +184,7 @@ void on_create_view(GSimpleAction *action, GVariant *parameter, gpointer user_da
     g_signal_connect(dialog, "response", G_CALLBACK(gtk_window_destroy), NULL);
 }
 
-void on_import_view(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
+void ActionHandlers_OnImportView(GSimpleAction *action, GVariant *parameter, gpointer user_data) {
     (void)action; (void)parameter;
     GtkApplication *app    = GTK_APPLICATION(user_data);
     GtkWindow      *parent = gtk_application_get_active_window(app);
@@ -191,8 +202,8 @@ void on_import_view(GSimpleAction *action, GVariant *parameter, gpointer user_da
     gtk_window_present(GTK_WINDOW(dialog));
 }
 
-void on_tree_selection_changed(GtkTreeSelection *selection, gpointer user_data) {
-    AppData *data = (AppData *)user_data;
+void ActionHandlers_OnTreeSelectionChanged(GtkTreeSelection *selection, gpointer user_data) {
+    EventViewerContext *ctx = (EventViewerContext *)user_data;
     GtkTreeModel *model;
     GtkTreeIter   iter;
     gchar        *name;
@@ -207,10 +218,10 @@ void on_tree_selection_changed(GtkTreeSelection *selection, gpointer user_data) 
         strcmp(name, "Security")    == 0 ||
         strcmp(name, "Setup")       == 0) {
 
-        gtk_notebook_set_current_page(GTK_NOTEBOOK(data->window.notebook), 1);
-        load_log_events(data, name);
+        gtk_notebook_set_current_page(GTK_NOTEBOOK(ctx->notebook), 1);
+        EventModels_LoadLogEvents(ctx, name);
     } else {
-        gtk_notebook_set_current_page(GTK_NOTEBOOK(data->window.notebook), 0);
+        gtk_notebook_set_current_page(GTK_NOTEBOOK(ctx->notebook), 0);
     }
 
     g_free(name);

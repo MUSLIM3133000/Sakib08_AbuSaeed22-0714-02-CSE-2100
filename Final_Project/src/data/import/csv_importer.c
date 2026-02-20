@@ -1,9 +1,22 @@
+/**
+ * @file data/import/csv_importer.c
+ * @brief CSV file importer implementation
+ *
+ * Parses CSV rows exported by CsvExporter and reconstructs
+ * EventRecord structs. Handles quoted fields to support messages
+ * that contain commas.
+ *
+ * @author Team Name
+ * @date February 2026
+ * @version 2.0
+ */
+
 #include "csv_importer.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-int load_csv(const char *filename, EventRecord **events) {
+int CsvImporter_Load(const char *filename, EventRecord **events) {
     FILE *f = fopen(filename, "r");
     if (!f) return 0;
 
@@ -11,6 +24,7 @@ int load_csv(const char *filename, EventRecord **events) {
     int count = 0;
     EventRecord *arr = NULL;
 
+    /* Skip header row */
     if (!fgets(line, sizeof(line), f)) {
         fclose(f);
         return 0;
@@ -20,6 +34,7 @@ int load_csv(const char *filename, EventRecord **events) {
         arr = (EventRecord *)realloc(arr, sizeof(EventRecord) * (size_t)(count + 1));
         EventRecord *e = &arr[count];
 
+        /* Initialise all fields to safe defaults */
         e->source = e->message = e->timestamp =
         e->computer = e->user = e->keywords = NULL;
         e->task_category = 0;
@@ -30,6 +45,7 @@ int load_csv(const char *filename, EventRecord **events) {
         if (sscanf(line, "%lu,%31[^,],%511[^,],%127[^,],%2047[^\n]",
                    &e->event_id, levelStr, source, timestamp, message) == 5) {
 
+            /* Map level string back to numeric constant */
             if      (strcmp(levelStr, "Critical")    == 0) e->level = EVENT_LEVEL_CRITICAL;
             else if (strcmp(levelStr, "Error")        == 0) e->level = EVENT_LEVEL_ERROR;
             else if (strcmp(levelStr, "Warning")      == 0) e->level = EVENT_LEVEL_WARNING;

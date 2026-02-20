@@ -1,6 +1,19 @@
+/**
+ * @file utils/platform/privilege_check.c
+ * @brief Windows administrator privilege detection implementation
+ *
+ * Uses AllocateAndInitializeSid to build the built-in Administrators SID,
+ * then calls CheckTokenMembership to determine the process token's group
+ * membership.
+ *
+ * @author Team Name
+ * @date February 2026
+ * @version 2.0
+ */
+
 #include "privilege_check.h"
 
-BOOL is_admin(void) {
+BOOL PlatformUtils_IsRunningAsAdmin(void) {
     BOOL isAdmin = FALSE;
     PSID adminGroup = NULL;
     SID_IDENTIFIER_AUTHORITY ntAuthority = SECURITY_NT_AUTHORITY;

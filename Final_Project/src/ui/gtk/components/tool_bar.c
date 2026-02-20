@@ -1,7 +1,16 @@
+/**
+ * @file ui/gtk/components/tool_bar.c
+ * @brief GTK4 toolbar component implementation
+ *
+ * @author Team Name
+ * @date February 2026
+ * @version 2.0
+ */
+
 #include "tool_bar.h"
 #include "ui/gtk/callbacks/action_handlers.h"
 
-GtkWidget *create_toolbar(AppData *data) {
+GtkWidget *ToolBar_Create(EventViewerContext *ctx) {
     GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     gtk_widget_add_css_class(toolbar, "toolbar");
     gtk_widget_set_margin_start(toolbar, 5);
@@ -30,7 +39,7 @@ GtkWidget *create_toolbar(AppData *data) {
     GtkWidget *refreshBtn = gtk_button_new_from_icon_name("view-refresh");
     gtk_box_append(GTK_BOX(toolbar), refreshBtn);
     g_signal_connect_swapped(refreshBtn, "clicked",
-                             G_CALLBACK(on_refresh), data->window.app);
+                             G_CALLBACK(ActionHandlers_OnRefresh), ctx->app);
 
     g_object_unref(actionsMenu);
     return toolbar;
