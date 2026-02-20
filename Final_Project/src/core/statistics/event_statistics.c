@@ -1,15 +1,27 @@
+/**
+ * @file core/statistics/event_statistics.c
+ * @brief Event statistics calculation implementation
+ *
+ * Counts events by severity level by directly calling Windows Event Log API.
+ *
+ * @author Team Name
+ * @date February 2026
+ * @version 2.0
+ */
+
 #include "event_statistics.h"
+#include "core/readers/windows/event_log_windows.h"
 #include <stdlib.h>
 
-EventStatistics calc_stats(EventLogRepository *repo, const wchar_t *log_name, int hours_back) {
+EventStatistics EventStatistics_Calculate(const wchar_t *log_name, int hours_back) {
     EventStatistics stats = {0};
-    if (!repo || !log_name) return stats;
+    if (!log_name) return stats;
 
-    void *handle = repo->open(log_name, hours_back);
+    void *handle = EventLog_Windows_Open(log_name, hours_back);
     if (!handle) return stats;
 
     EventRecord *records = NULL;
-    int count = repo->read(handle, &records, 5000);
+    int count = EventLog_Windows_Read(handle, &records, 5000);
 
     for (int i = 0; i < count; i++) {
         switch (records[i].level) {
@@ -19,10 +31,10 @@ EventStatistics calc_stats(EventLogRepository *repo, const wchar_t *log_name, in
             case EVENT_LEVEL_INFORMATION: stats.information_count++; break;
             default:                                                  break;
         }
-        free_event_record(&records[i]);
+        EventRecord_Free(&records[i]);
     }
 
     free(records);
-    repo->close(handle);
+    EventLog_Windows_Close(handle);
     return stats;
 }
