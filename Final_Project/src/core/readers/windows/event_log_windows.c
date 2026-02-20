@@ -1,3 +1,15 @@
+/**
+ * @file core/readers/windows/event_log_windows.c
+ * @brief Windows Event Log API implementation
+ *
+ * Direct implementation using EvtQuery / EvtNext / EvtRender from winevt.h.
+ *
+ * @platform Windows Vista and later
+ * @author Team Name
+ * @date February 2026
+ * @version 2.0
+ */
+
 #include "event_log_windows.h"
 #include "utils/conversion/string_utils.h"
 #include "utils/time/time_formatter.h"
@@ -5,7 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-void *open_log(const wchar_t *log_name, int hours_back) {
+void *EventLog_Windows_Open(const wchar_t *log_name, int hours_back) {
     EVT_HANDLE hQuery = NULL;
     wchar_t query[256];
 
@@ -30,7 +42,7 @@ void *open_log(const wchar_t *log_name, int hours_back) {
     return (void *)hQuery;
 }
 
-int read_events(void *handle, EventRecord **events, int max_events) {
+int EventLog_Windows_Read(void *handle, EventRecord **events, int max_events) {
     EVT_HANDLE query_handle = (EVT_HANDLE)handle;
 
     if (!query_handle || !events || max_events <= 0) return 0;
@@ -73,9 +85,9 @@ int read_events(void *handle, EventRecord **events, int max_events) {
 
                     arr[count].event_id  = values[EvtSystemEventID].UInt16Val;
                     arr[count].level     = values[EvtSystemLevel].ByteVal;
-                    arr[count].source    = wchar_to_utf8(
+                    arr[count].source    = StringUtils_WcharToUtf8(
                                               values[EvtSystemProviderName].StringVal);
-                    arr[count].timestamp = filetime_to_str(
+                    arr[count].timestamp = TimeFormatter_FiletimeToString(
                                               values[EvtSystemTimeCreated].FileTimeVal);
                     arr[count].message   = _strdup("No message text");
 
@@ -115,14 +127,14 @@ int read_events(void *handle, EventRecord **events, int max_events) {
     return count;
 }
 
-EventStatistics get_stats(const wchar_t *log_name, int hours_back) {
+EventStatistics EventLog_Windows_GetStatistics(const wchar_t *log_name, int hours_back) {
     EventStatistics stats = {0};
 
-    void *handle = open_log(log_name, hours_back);
+    void *handle = EventLog_Windows_Open(log_name, hours_back);
     if (!handle) return stats;
 
     EventRecord *records = NULL;
-    int count = read_events(handle, &records, 5000);
+    int count = EventLog_Windows_Read(handle, &records, 5000);
 
     for (int i = 0; i < count; i++) {
         switch (records[i].level) {
@@ -132,22 +144,14 @@ EventStatistics get_stats(const wchar_t *log_name, int hours_back) {
             case EVENT_LEVEL_INFORMATION: stats.information_count++; break;
             default: break;
         }
-        free_event_record(&records[i]);
+        EventRecord_Free(&records[i]);
     }
 
     free(records);
-    close_log(handle);
+    EventLog_Windows_Close(handle);
     return stats;
 }
 
-void close_log(void *handle) {
+void EventLog_Windows_Close(void *handle) {
     if (handle) EvtClose((EVT_HANDLE)handle);
 }
-
-EventLogRepository g_windowsRepository = {
-    .name           = "Windows Event Log",
-    .open           = open_log,
-    .read           = read_events,
-    .get_statistics = get_stats,
-    .close          = close_log
-};
