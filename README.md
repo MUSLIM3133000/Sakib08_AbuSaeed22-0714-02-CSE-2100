@@ -50,7 +50,107 @@ This section records the AI prompts used to transform the Windows Event Viewer a
 
 ### Prompt 1.1 — Initial Codebase Audit
 
-> "Analyze this C Windows Event Viewer application codebase. Read all source files (main.c, event_log_reader.h, event_log_reader.c). For each file, list all functions, global variables, data structures, and macros. Identify: (1) The purpose of each module, (2) Dependencies between modules, (3) GUI framework usage (GTK4), (4) Windows Event Log API usage (winevt.h), (5) Naming conventions, (6) SOLID principle violations, (7) Missing design patterns, and (8) Code smells. Provide a comprehensive architecture summary showing how GTK4 GUI interacts with Windows Event Log API."
+> "
+
+**Role:**
+You are a senior **software architect and C systems programming expert** with experience in **GTK4 GUI development and Windows API programming**.
+
+---
+
+### Context
+
+I will provide the source code of a **C-based Windows Event Viewer application**, including:
+
+* `main.c`
+* `event_log_reader.h`
+* `event_log_reader.c`
+
+The project uses:
+
+* **GTK4** for the graphical user interface
+* **Windows Event Log API (`winevt.h`)** for accessing event logs
+
+---
+
+### Task
+
+Perform a deep architectural and code quality analysis of the entire codebase.
+
+For each file, provide:
+
+#### 1️⃣ Structural Analysis
+
+* List all:
+
+  * Functions
+  * Global variables
+  * Data structures
+  * Macros
+* Briefly explain the role of each element.
+
+#### 2️⃣ Module-Level Analysis
+
+* Explain the **purpose of each module**
+* Describe how modules interact with each other
+* Identify dependencies between modules
+
+#### 3️⃣ Framework & API Usage
+
+* Analyze how **GTK4** is used:
+
+  * Widgets
+  * Signals
+  * Event handling
+  * UI structure
+* Analyze how **Windows Event Log API (`winevt.h`)** is used:
+
+  * Handles
+  * Queries
+  * Event retrieval
+  * Resource management
+
+#### 4️⃣ Design & Quality Evaluation
+
+Evaluate the code for:
+
+* Naming conventions consistency
+* Separation of concerns
+* SOLID principle violations
+* Missing design patterns (if applicable)
+* Code smells (e.g., tight coupling, large functions, global state misuse, etc.)
+
+#### 5️⃣ Architectural Overview
+
+Provide a comprehensive architecture summary explaining:
+
+* Overall system structure
+* Data flow between GUI and Event Log layer
+* How GTK4 components trigger Windows API calls
+* How results are returned and displayed
+* Coupling level between layers
+
+---
+
+### Output Requirements
+
+* Use clear section headings
+* Be technical and precise
+* Do not rewrite or refactor the code
+* Focus on analysis, not implementation
+* Assume this is for an academic software architecture review
+
+---
+
+### End Goal
+
+Produce a **complete architectural and quality assessment report** of the application, suitable for:
+
+* Academic evaluation
+* Software engineering review
+* Refactoring planning
+
+---
+"
 
 **Purpose:** Understanding the complete system architecture before making changes. We needed to map out every function, identify the boundary between GUI and business logic, and understand how the Windows Event Log API is wrapped and consumed.
 
