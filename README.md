@@ -15,32 +15,32 @@ Course Code: 0714 02 CSE 2100 || Course Title: Advanced Programming Laboratory
 
 ## 📋 Table of Contents
 
-### Part A — Project Overview
+### Part A — Project Overview (Completed✅)
 1. [Introduction](#1-introduction)
 2. [Three Project Versions](#2-three-project-versions)
 3. [Key Features](#3-key-features)
 4. [Technology Stack](#4-technology-stack)
 5. [Repository Structure](#5-repository-structure)
 
-### Part B — Build & Usage
+### Part B — Build & Usage (Completed✅)
 6. [Build Requirements](#6-build-requirements)
 7. [Compilation Instructions](#7-compilation-instructions)
 8. [Running the Application](#8-running-the-application)
 9. [Troubleshooting](#9-troubleshooting)
 
-### Part C — Architecture & Design
+### Part C — Architecture & Design (Completed✅)
 10. [Folder Structure](#10-folder-structure)
 11. [Version Comparison](#11-version-comparison)
 12. [Architecture Differences](#12-architecture-differences)
 
-### Part D — Refactoring Documentation
+### Part D — Refactoring Documentation (Not Completed❌)
 13. [AI Prompts Used](#13-ai-prompts-used)
 14. [SOLID Principles Analysis](#14-solid-principles-analysis)
 15. [Design Patterns Implemented](#15-design-patterns-implemented)
 16. [Detailed Change Log](#16-detailed-change-log)
 17. [Lessons Learned](#17-lessons-learned)
 
-### Part E — Appendices
+### Part E — Appendices (Not Completed❌)
 18. [File Metrics Comparison](#18-file-metrics-comparison)
 19. [Dependency Flow Verification](#19-dependency-flow-verification)
 20. [Contact & References](#20-contact--references)
