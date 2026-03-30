@@ -1,43 +1,33 @@
 /**
- * @file core/types/event_record.c
- * @brief Implementation of core EventRecord operations
+ * @file core/types/event_record.cpp
+ * @brief EventRecord and EventLevel helper implementations.
  *
- * Provides the level-to-string conversion and memory cleanup
- * for EventRecord structs. Pure logic with no platform dependencies.
- *
- * @author EventLogReader Team
- * @date February 2026
- * @version 2.0
+ * C improvement: EventRecord_Free() with manual free() calls is gone.
+ * std::string destructs itself — zero manual memory management.
  */
 
 #include "event_record.h"
-#include <stdlib.h>
 
-const char *EventRecord_GetLevelString(int level) {
+namespace EventViewer {
+
+const char* eventLevelToString(EventLevel level) noexcept {
     switch (level) {
-        case EVENT_LEVEL_CRITICAL:    return "Critical";
-        case EVENT_LEVEL_ERROR:       return "Error";
-        case EVENT_LEVEL_WARNING:     return "Warning";
-        case EVENT_LEVEL_INFORMATION: return "Information";
-        case EVENT_LEVEL_VERBOSE:     return "Verbose";
-        default:                      return "Audit Success";
+        case EventLevel::Critical:    return "Critical";
+        case EventLevel::Error:       return "Error";
+        case EventLevel::Warning:     return "Warning";
+        case EventLevel::Information: return "Information";
+        case EventLevel::Verbose:     return "Verbose";
+        default:                      return "Unknown";
     }
 }
 
-void EventRecord_Free(EventRecord *record) {
-    if (!record) return;
-    free(record->source);
-    free(record->message);
-    free(record->timestamp);
-    free(record->computer);
-    free(record->user);
-    free(record->keywords);
-
-    /* Null out freed pointers to prevent double-free */
-    record->source    = NULL;
-    record->message   = NULL;
-    record->timestamp = NULL;
-    record->computer  = NULL;
-    record->user      = NULL;
-    record->keywords  = NULL;
+EventLevel eventLevelFromString(const std::string& s) noexcept {
+    if (s == "Critical")    return EventLevel::Critical;
+    if (s == "Error")       return EventLevel::Error;
+    if (s == "Warning")     return EventLevel::Warning;
+    if (s == "Information") return EventLevel::Information;
+    if (s == "Verbose")     return EventLevel::Verbose;
+    return EventLevel::Unknown;
 }
+
+} // namespace EventViewer

@@ -1,67 +1,96 @@
 /**
  * @file core/types/event_record.h
- * @brief Core data types for the Windows Event Viewer
+ * @brief Core domain type for the Windows Event Viewer (C++17)
  *
- * Defines the fundamental data structures used throughout the application:
- * EventRecord (single event), EventStatistics (aggregated counts),
- * and event level constants.
+ * SOLID changes vs C version:
+ *  - SRP : Event is a pure data object — no I/O, no Windows API.
+ *  - OCP : EventLevel is an enum class; adding a level needs no existing edits.
+ *  - LSP : Immutable value semantics — subclasses cannot break field contracts.
  *
- * @author EventLogReader Team
- * @date February 2026
- * @version 2.0
+ * C improvements:
+ *  - char* + manual free()  →  std::string (RAII, no leaks)
+ *  - #define constants      →  enum class EventLevel (type-safe)
+ *  - EventRecord_Free()     →  destructor / automatic cleanup
  */
 
-#ifndef EVENT_RECORD_H
-#define EVENT_RECORD_H
+#pragma once
 
-#include <windows.h>
+#include <string>
+#include <cstdint>
 
-/* ---- Event level constants ---- */
-#define EVENT_LEVEL_CRITICAL     1
-#define EVENT_LEVEL_ERROR        2
-#define EVENT_LEVEL_WARNING      3
-#define EVENT_LEVEL_INFORMATION  4
-#define EVENT_LEVEL_VERBOSE      5
+namespace EventViewer {
+
+// ── Replaces: #define EVENT_LEVEL_CRITICAL 1 … (strongly typed, no int collision)
+enum class EventLevel : uint8_t {
+    Unknown     = 0,
+    Critical    = 1,
+    Error       = 2,
+    Warning     = 3,
+    Information = 4,
+    Verbose     = 5
+};
+
+/** Converts EventLevel → display string. Free function keeps enum a value type. */
+const char* eventLevelToString(EventLevel level) noexcept;
+
+/** Converts string → EventLevel (used by CSV importer). */
+EventLevel eventLevelFromString(const std::string& s) noexcept;
 
 /**
- * @brief Represents a single Windows event log entry
+ * @brief Represents a single Windows event log entry.
+ *
+ * All string fields are std::string — no manual malloc/free needed.
+ * Replacing: typedef struct { char *source; char *message; … } EventRecord;
  */
-typedef struct {
-    DWORD event_id;       /**< Event ID number */
-    DWORD level;          /**< Severity level (use EVENT_LEVEL_* constants) */
-    char *source;         /**< Provider/source name (heap-allocated, must free) */
-    char *message;        /**< Event message text (heap-allocated, must free) */
-    char *timestamp;      /**< Formatted local timestamp (heap-allocated, must free) */
-    char *computer;       /**< Computer name, may be NULL */
-    char *user;           /**< User account, may be NULL */
-    DWORD task_category;  /**< Task category code */
-    char *keywords;       /**< Event keywords, may be NULL */
-} EventRecord;
+class EventRecord {
+public:
+    // ── Construction ─────────────────────────────────────────────────────
+    EventRecord() = default;
 
-/**
- * @brief Aggregated event counts grouped by severity level
- */
-typedef struct {
-    int critical_count;       /**< Number of Critical events */
-    int error_count;          /**< Number of Error events */
-    int warning_count;        /**< Number of Warning events */
-    int information_count;    /**< Number of Informational events */
-    int audit_success_count;  /**< Number of Audit Success events */
-    int audit_failure_count;  /**< Number of Audit Failure events */
-} EventStatistics;
+    EventRecord(uint32_t    eventId,
+                EventLevel  level,
+                std::string source,
+                std::string message,
+                std::string timestamp,
+                std::string computer    = {},
+                std::string user        = {},
+                uint32_t    taskCategory = 0,
+                std::string keywords    = {})
+        : m_eventId     (eventId)
+        , m_level       (level)
+        , m_source      (std::move(source))
+        , m_message     (std::move(message))
+        , m_timestamp   (std::move(timestamp))
+        , m_computer    (std::move(computer))
+        , m_user        (std::move(user))
+        , m_taskCategory(taskCategory)
+        , m_keywords    (std::move(keywords))
+    {}
 
-/**
- * @brief Converts a numeric event level to its string representation
- * @param level Numeric level (use EVENT_LEVEL_* constants)
- * @return Static string: "Critical", "Error", "Warning", "Information", "Verbose", or "Audit Success"
- */
-const char *EventRecord_GetLevelString(int level);
+    // ── Accessors (read-only — replaces direct struct field access) ───────
+    uint32_t           eventId()      const noexcept { return m_eventId; }
+    EventLevel         level()        const noexcept { return m_level; }
+    const std::string& source()       const noexcept { return m_source; }
+    const std::string& message()      const noexcept { return m_message; }
+    const std::string& timestamp()    const noexcept { return m_timestamp; }
+    const std::string& computer()     const noexcept { return m_computer; }
+    const std::string& user()         const noexcept { return m_user; }
+    uint32_t           taskCategory() const noexcept { return m_taskCategory; }
+    const std::string& keywords()     const noexcept { return m_keywords; }
 
-/**
- * @brief Frees all heap-allocated fields inside an EventRecord
- * @param record Pointer to the record to free (the struct itself is NOT freed)
- * @note After calling, all char* fields are invalid. Do not free the struct pointer itself.
- */
-void EventRecord_Free(EventRecord *record);
+    /** Convenience: level as display string (replaces EventRecord_GetLevelString). */
+    const char* levelString() const noexcept { return eventLevelToString(m_level); }
 
-#endif /* EVENT_RECORD_H */
+private:
+    uint32_t    m_eventId     = 0;
+    EventLevel  m_level       = EventLevel::Unknown;
+    std::string m_source;
+    std::string m_message;
+    std::string m_timestamp;
+    std::string m_computer;
+    std::string m_user;
+    uint32_t    m_taskCategory = 0;
+    std::string m_keywords;
+};
+
+} // namespace EventViewer
