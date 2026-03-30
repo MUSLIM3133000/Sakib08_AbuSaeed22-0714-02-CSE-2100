@@ -1,40 +1,38 @@
 /**
- * @file core/statistics/event_statistics.c
- * @brief Event statistics calculation implementation
+ * @file core/statistics/event_statistics.cpp
+ * @brief EventStatisticsCalculator implementation (C++17)
  *
- * Counts events by severity level by directly calling Windows Event Log API.
- *
- * @author EventLogReader Team
- * @date February 2026
- * @version 2.0
+ * C improvement: The original called EventLog_Windows_Open() + Read() directly
+ * and used raw pointers + malloc. Now uses the ILogRepository interface,
+ * std::vector<EventRecord>, and no manual memory management.
  */
 
 #include "event_statistics.h"
-#include "core/readers/windows/event_log_windows.h"
-#include <stdlib.h>
+#include "core/readers/log_repository.h"
+#include <vector>
 
-EventStatistics EventStatistics_Calculate(const wchar_t *log_name, int hours_back) {
-    EventStatistics stats = {0};
-    if (!log_name) return stats;
+namespace EventViewer {
 
-    void *handle = EventLog_Windows_Open(log_name, hours_back);
-    if (!handle) return stats;
+EventStatistics EventStatisticsCalculator::calculate(
+    const wchar_t* logName, int hoursBack) const
+{
+    EventStatistics stats{};
+    if (!logName) return stats;
 
-    EventRecord *records = NULL;
-    int count = EventLog_Windows_Read(handle, &records, 5000);
+    // DIP: use the abstract ILogRepository, not the concrete Windows class
+    auto repo    = ILogRepository::create();
+    auto records = repo->read(logName, hoursBack, 5000);
 
-    for (int i = 0; i < count; i++) {
-        switch (records[i].level) {
-            case EVENT_LEVEL_CRITICAL:    stats.critical_count++;    break;
-            case EVENT_LEVEL_ERROR:       stats.error_count++;       break;
-            case EVENT_LEVEL_WARNING:     stats.warning_count++;     break;
-            case EVENT_LEVEL_INFORMATION: stats.information_count++; break;
-            default:                                                  break;
+    for (const auto& r : records) {
+        switch (r.level()) {
+            case EventLevel::Critical:    ++stats.criticalCount;    break;
+            case EventLevel::Error:       ++stats.errorCount;       break;
+            case EventLevel::Warning:     ++stats.warningCount;     break;
+            case EventLevel::Information: ++stats.informationCount; break;
+            default: break;
         }
-        EventRecord_Free(&records[i]);
     }
-
-    free(records);
-    EventLog_Windows_Close(handle);
     return stats;
 }
+
+} // namespace EventViewer

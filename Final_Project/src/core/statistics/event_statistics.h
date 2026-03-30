@@ -1,26 +1,63 @@
 /**
  * @file core/statistics/event_statistics.h
- * @brief Event statistics calculation interface
+ * @brief Event statistics types and calculator interface (C++17)
  *
- * Provides aggregated event counts by severity level by directly
- * calling Windows Event Log functions.
+ * SOLID changes vs C version:
+ *  - SRP : EventStatistics is a plain value object — no calculation inside.
+ *          IStatisticsCalculator is a separate interface for calculation.
+ *  - ISP : IStatisticsCalculator has exactly one responsibility.
+ *  - DIP : Callers depend on IStatisticsCalculator, not on the concrete impl.
  *
- * @author EventLogReader Team
- * @date February 2026
- * @version 2.0
+ * C improvement:
+ *  - The C EventStatistics_Calculate() called Windows API directly (hard-coded).
+ *    Now calculation is behind an interface — swappable, testable.
  */
 
-#ifndef EVENT_STATISTICS_H
-#define EVENT_STATISTICS_H
+#pragma once
 
+#include <cstdint>
+#include <string>
+#include <memory>
 #include "core/types/event_record.h"
 
-/**
- * @brief Computes event statistics from Windows Event Log
- * @param log_name  Log identifier (wide-string channel name)
- * @param hours_back  Hours of history to analyse; 0 = all events
- * @return Populated EventStatistics (all fields zero on failure)
- */
-EventStatistics EventStatistics_Calculate(const wchar_t *log_name, int hours_back);
+namespace EventViewer {
 
-#endif /* EVENT_STATISTICS_H */
+// ── Value object: aggregated counts ──────────────────────────────────────────
+struct EventStatistics {
+    uint32_t criticalCount    = 0;
+    uint32_t errorCount       = 0;
+    uint32_t warningCount     = 0;
+    uint32_t informationCount = 0;
+    uint32_t auditSuccessCount = 0;
+    uint32_t auditFailureCount = 0;
+
+    uint32_t total() const noexcept {
+        return criticalCount + errorCount + warningCount
+             + informationCount + auditSuccessCount + auditFailureCount;
+    }
+};
+
+// ── Interface: calculation strategy (DIP + ISP) ───────────────────────────────
+// C version had one global function tightly coupled to Windows API.
+// Now any class can implement this interface (live log, CSV file, mock data).
+class IStatisticsCalculator {
+public:
+    virtual ~IStatisticsCalculator() = default;
+
+    /**
+     * @brief Calculates event statistics for the given log channel.
+     * @param logName    Wide-string log channel (e.g. L"Application")
+     * @param hoursBack  Hours of history; 0 = all events
+     */
+    virtual EventStatistics calculate(const wchar_t* logName,
+                                      int hoursBack) const = 0;
+};
+
+// ── Concrete: reads stats from Windows Event Log ──────────────────────────────
+class EventStatisticsCalculator : public IStatisticsCalculator {
+public:
+    EventStatistics calculate(const wchar_t* logName,
+                              int hoursBack) const override;
+};
+
+} // namespace EventViewer
