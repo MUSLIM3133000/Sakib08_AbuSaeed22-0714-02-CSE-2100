@@ -1,157 +1,149 @@
 /**
- * @file core/readers/windows/event_log_windows.c
- * @brief Windows Event Log API implementation
+ * @file core/readers/windows/event_log_windows.cpp
+ * @brief Windows Event Log reader implementation (C++17)
  *
- * Direct implementation using EvtQuery / EvtNext / EvtRender from winevt.h.
- *
- * @platform Windows Vista and later
- * @author EventLogReader Team
- * @date February 2026
- * @version 2.0
+ * C improvements:
+ *  - EVT_HANDLE cast to void* and back  →  typed EVT_HANDLE with RAII lambda guard
+ *  - calloc(max_events) upfront         →  std::vector grown on demand
+ *  - _strdup / wcstombs                 →  StringUtils::wcharToUtf8 returning std::string
+ *  - Manual EvtClose in every path      →  unique_ptr custom deleter (guaranteed close)
+ *  - EventLog_Windows_Open/Read/Close   →  single read() method, no leaks possible
  */
 
 #include "event_log_windows.h"
 #include "utils/conversion/string_utils.h"
 #include "utils/time/time_formatter.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <algorithm>
 
-void *EventLog_Windows_Open(const wchar_t *log_name, int hours_back) {
-    EVT_HANDLE hQuery = NULL;
-    wchar_t query[256];
+namespace EventViewer {
 
-    if (hours_back > 0) {
-        long long ms_back = (long long)hours_back * 60LL * 60LL * 1000LL;
-        swprintf(query, 256,
-            L"*[System[TimeCreated[timediff(@SystemTime) <= %lld]]]",
-            ms_back);
-
-        hQuery = EvtQuery(NULL, log_name, query,
-                          EvtQueryChannelPath | EvtQueryForwardDirection);
-    } else {
-        hQuery = EvtQuery(NULL, log_name, L"*",
-                          EvtQueryChannelPath | EvtQueryForwardDirection);
-    }
-
-    if (!hQuery) {
-        wprintf(L"EvtQuery failed for log '%ls', error %lu\n",
-                log_name, GetLastError());
-    }
-
-    return (void *)hQuery;
+// ── ILogRepository factory (defined here — only this TU knows the concrete type)
+std::unique_ptr<ILogRepository> ILogRepository::create() {
+    return std::make_unique<WindowsEventLogRepository>();
 }
 
-int EventLog_Windows_Read(void *handle, EventRecord **events, int max_events) {
-    EVT_HANDLE query_handle = (EVT_HANDLE)handle;
+// ─────────────────────────────────────────────────────────────────────────────
+// WindowsEventLogRepository::read
+// ─────────────────────────────────────────────────────────────────────────────
+std::vector<EventRecord> WindowsEventLogRepository::read(
+    const wchar_t* logName, int hoursBack, int maxEvents) const
+{
+    std::vector<EventRecord> results;
 
-    if (!query_handle || !events || max_events <= 0) return 0;
+#ifdef _WIN32
+    if (!logName || maxEvents <= 0) return results;
 
-    EventRecord *arr = (EventRecord *)calloc((size_t)max_events, sizeof(EventRecord));
-    if (!arr) return 0;
+    std::wstring xpath = buildXPathQuery(hoursBack);
 
-    int count = 0;
-    EVT_HANDLE evtArray[16];
+    // RAII: EVT_HANDLE auto-closed when hQuery goes out of scope
+    auto evtDeleter = [](EVT_HANDLE h){ if (h) EvtClose(h); };
+    using EvtHandleGuard = std::unique_ptr<void, decltype(evtDeleter)>;
+
+    EvtHandleGuard hQuery(
+        EvtQuery(nullptr, logName,
+                 xpath.empty() ? L"*" : xpath.c_str(),
+                 EvtQueryChannelPath | EvtQueryForwardDirection),
+        evtDeleter);
+
+    if (!hQuery) return results;
+
+    // Render context (system fields only)
+    EvtHandleGuard hCtx(
+        EvtCreateRenderContext(0, nullptr, EvtRenderContextSystem),
+        evtDeleter);
+
+    if (!hCtx) return results;
+
+    results.reserve(std::min(maxEvents, 1000));
+
+    constexpr DWORD BATCH = 16;
+    EVT_HANDLE batch[BATCH];
     DWORD returned = 0;
 
-    EVT_HANDLE context = EvtCreateRenderContext(0, NULL, EvtRenderContextSystem);
-    if (!context) {
-        wprintf(L"EvtCreateRenderContext failed: %lu\n", GetLastError());
-        free(arr);
-        return 0;
-    }
-
-    while (count < max_events) {
-        BOOL ok = EvtNext(query_handle, 16, evtArray, INFINITE, 0, &returned);
-        if (!ok) {
-            DWORD err = GetLastError();
-            if (err == ERROR_NO_MORE_ITEMS) break;
-            wprintf(L"EvtNext failed: %lu\n", err);
+    while (static_cast<int>(results.size()) < maxEvents) {
+        if (!EvtNext(hQuery.get(), BATCH, batch, INFINITE, 0, &returned)) {
+            if (GetLastError() == ERROR_NO_MORE_ITEMS) break;
             break;
         }
-
-        for (DWORD i = 0; i < returned && count < max_events; i++) {
-            DWORD bufferUsed    = 0;
-            DWORD propertyCount = 0;
-
-            EvtRender(context, evtArray[i], EvtRenderEventValues,
-                      0, NULL, &bufferUsed, &propertyCount);
-
-            if (GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
-                PEVT_VARIANT values = (PEVT_VARIANT)malloc(bufferUsed);
-
-                if (values && EvtRender(context, evtArray[i], EvtRenderEventValues,
-                                        bufferUsed, values, &bufferUsed, &propertyCount)) {
-
-                    arr[count].event_id  = values[EvtSystemEventID].UInt16Val;
-                    arr[count].level     = values[EvtSystemLevel].ByteVal;
-                    arr[count].source    = StringUtils_WcharToUtf8(
-                                              values[EvtSystemProviderName].StringVal);
-                    arr[count].timestamp = TimeFormatter_FiletimeToString(
-                                              values[EvtSystemTimeCreated].FileTimeVal);
-                    arr[count].message   = _strdup("No message text");
-
-                    arr[count].computer      = NULL;
-                    arr[count].user          = NULL;
-                    arr[count].task_category = 0;
-                    arr[count].keywords      = NULL;
-
-                    EVT_HANDLE pubMeta = EvtOpenPublisherMetadata(
-                                            NULL,
-                                            values[EvtSystemProviderName].StringVal,
-                                            NULL, 0, 0);
-                    if (pubMeta) {
-                        WCHAR msgBuffer[1024];
-                        DWORD msgUsed = 0;
-                        if (EvtFormatMessage(pubMeta, evtArray[i], 0, 0, NULL,
-                                             EvtFormatMessageEvent,
-                                             1024, msgBuffer, &msgUsed)) {
-                            char temp[2048];
-                            wcstombs(temp, msgBuffer, sizeof(temp));
-                            free(arr[count].message);
-                            arr[count].message = _strdup(temp);
-                        }
-                        EvtClose(pubMeta);
-                    }
-                }
-                free(values);
-            }
-
-            EvtClose(evtArray[i]);
-            count++;
+        for (DWORD i = 0; i < returned; ++i) {
+            EvtHandleGuard hEvt(batch[i], evtDeleter);
+            if (static_cast<int>(results.size()) < maxEvents)
+                results.push_back(parseEvent(hEvt.get(), hCtx.get()));
         }
     }
+#else
+    (void)logName; (void)hoursBack; (void)maxEvents;
+#endif
 
-    EvtClose(context);
-    *events = arr;
-    return count;
+    return results;
 }
 
-EventStatistics EventLog_Windows_GetStatistics(const wchar_t *log_name, int hours_back) {
-    EventStatistics stats = {0};
+std::vector<std::wstring> WindowsEventLogRepository::availableLogs() const {
+    return { L"Application", L"System", L"Security", L"Setup" };
+}
 
-    void *handle = EventLog_Windows_Open(log_name, hours_back);
-    if (!handle) return stats;
+// ─────────────────────────────────────────────────────────────────────────────
+// Private helpers
+// ─────────────────────────────────────────────────────────────────────────────
+#ifdef _WIN32
+std::wstring WindowsEventLogRepository::buildXPathQuery(int hoursBack) {
+    if (hoursBack <= 0) return {};
+    wchar_t buf[256];
+    long long ms = static_cast<long long>(hoursBack) * 3600LL * 1000LL;
+    swprintf_s(buf, L"*[System[TimeCreated[timediff(@SystemTime) <= %lld]]]", ms);
+    return buf;
+}
 
-    EventRecord *records = NULL;
-    int count = EventLog_Windows_Read(handle, &records, 5000);
+EventRecord WindowsEventLogRepository::parseEvent(EVT_HANDLE hEvent,
+                                                   EVT_HANDLE hCtx)
+{
+    DWORD bufUsed = 0, propCount = 0;
+    EvtRender(hCtx, hEvent, EvtRenderEventValues, 0, nullptr, &bufUsed, &propCount);
 
-    for (int i = 0; i < count; i++) {
-        switch (records[i].level) {
-            case EVENT_LEVEL_CRITICAL:    stats.critical_count++;    break;
-            case EVENT_LEVEL_ERROR:       stats.error_count++;       break;
-            case EVENT_LEVEL_WARNING:     stats.warning_count++;     break;
-            case EVENT_LEVEL_INFORMATION: stats.information_count++; break;
-            default: break;
-        }
-        EventRecord_Free(&records[i]);
+    if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) return {};
+
+    std::vector<BYTE> buf(bufUsed);
+    auto* vals = reinterpret_cast<PEVT_VARIANT>(buf.data());
+
+    if (!EvtRender(hCtx, hEvent, EvtRenderEventValues,
+                   bufUsed, vals, &bufUsed, &propCount))
+        return {};
+
+    uint32_t   eventId  = vals[EvtSystemEventID].UInt16Val;
+    auto       level    = static_cast<EventLevel>(vals[EvtSystemLevel].ByteVal);
+    uint32_t   taskCat  = vals[EvtSystemTask].UInt16Val;
+    ULONGLONG  ft       = (vals[EvtSystemTimeCreated].Type == EvtVarTypeFileTime)
+                          ? vals[EvtSystemTimeCreated].FileTimeVal : 0;
+
+    const wchar_t* providerW = (vals[EvtSystemProviderName].Type == EvtVarTypeString)
+                                ? vals[EvtSystemProviderName].StringVal : L"";
+    const wchar_t* computerW = (vals[EvtSystemComputer].Type == EvtVarTypeString)
+                                ? vals[EvtSystemComputer].StringVal : L"";
+
+    // Fetch rendered message
+    std::wstring msgW;
+    DWORD msgSize = 0;
+    EvtFormatMessage(nullptr, hEvent, 0, 0, nullptr,
+                     EvtFormatMessageEvent, 0, nullptr, &msgSize);
+    if (msgSize > 0) {
+        msgW.resize(msgSize);
+        EvtFormatMessage(nullptr, hEvent, 0, 0, nullptr,
+                         EvtFormatMessageEvent,
+                         static_cast<DWORD>(msgW.size()),
+                         msgW.data(), &msgSize);
     }
 
-    free(records);
-    EventLog_Windows_Close(handle);
-    return stats;
+    return EventRecord{
+        eventId,
+        level,
+        StringUtils::wcharToUtf8(providerW),
+        msgW.empty() ? "No message" : StringUtils::wcharToUtf8(msgW.c_str()),
+        TimeFormatter::fileTimeToString(ft),
+        StringUtils::wcharToUtf8(computerW),
+        {},
+        taskCat
+    };
 }
+#endif
 
-void EventLog_Windows_Close(void *handle) {
-    if (handle) EvtClose((EVT_HANDLE)handle);
-}
+} // namespace EventViewer

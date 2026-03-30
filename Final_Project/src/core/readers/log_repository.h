@@ -1,49 +1,58 @@
 /**
  * @file core/readers/log_repository.h
- * @brief Direct event log reading function declarations
+ * @brief Abstract interface for reading event log data (C++17)
  *
- * Provides direct access to Windows Event Log reading functionality.
- * No abstraction layer - direct implementation.
+ * SOLID changes vs C version:
+ *  - DIP : High-level modules (statistics, UI models) depend on THIS interface,
+ *          not on event_log_windows.h or any platform-specific header.
+ *  - OCP : Add a Linux/syslog reader by implementing ILogRepository — zero
+ *          changes to any existing code.
+ *  - LSP : Any concrete ILogRepository can be substituted transparently.
+ *  - ISP : Interface is focused — only read operations. Export is separate.
  *
- * @author EventLogReader Team
- * @date February 2026
- * @version 2.0
+ * C improvement:
+ *  - void* handle pattern replaced by a proper abstract class.
+ *  - Raw EventRecord* array replaced by std::vector<EventRecord>.
+ *  - Caller no longer responsible for free() on every element.
+ *  - Factory method create() returns a platform-appropriate implementation.
  */
 
-#ifndef LOG_REPOSITORY_H
-#define LOG_REPOSITORY_H
+#pragma once
 
+#include <vector>
+#include <string>
+#include <memory>
 #include "core/types/event_record.h"
 
-/**
- * @brief Opens a Windows Event Log for reading
- * @param log_name Wide-character log name (e.g., L"Application", L"System")
- * @param hours_back Hours of history to query (0 = all events)
- * @return Handle to the opened log, or NULL on failure
- */
-void *EventLog_Open(const wchar_t *log_name, int hours_back);
+namespace EventViewer {
 
-/**
- * @brief Reads events from an open log handle
- * @param handle Handle returned from EventLog_Open()
- * @param events Output pointer to event array (caller must free)
- * @param max_events Maximum number of events to read
- * @return Number of events read, or 0 on error
- */
-int EventLog_Read(void *handle, EventRecord **events, int max_events);
+class ILogRepository {
+public:
+    virtual ~ILogRepository() = default;
 
-/**
- * @brief Gets statistics for a log
- * @param log_name Wide-character log name
- * @param hours_back Hours of history to analyze
- * @return Event statistics structure
- */
-EventStatistics EventLog_GetStatistics(const wchar_t *log_name, int hours_back);
+    /**
+     * @brief Reads events from the named log channel.
+     * @param logName    Wide-string channel (e.g. L"Application")
+     * @param hoursBack  Hours of history to include; 0 = all events
+     * @param maxEvents  Upper bound on returned records
+     * @return Vector of EventRecord (empty on failure — never throws)
+     *
+     * C equivalent: EventLog_Open() + EventLog_Read() + EventLog_Close()
+     * collapsed into one safe call that cleans up after itself.
+     */
+    virtual std::vector<EventRecord> read(const wchar_t* logName,
+                                          int   hoursBack,
+                                          int   maxEvents) const = 0;
 
-/**
- * @brief Closes an open log handle
- * @param handle Handle to close
- */
-void EventLog_Close(void *handle);
+    /** @brief Returns the names of available log channels for the sidebar tree. */
+    virtual std::vector<std::wstring> availableLogs() const = 0;
 
-#endif /* LOG_REPOSITORY_H */
+    /**
+     * @brief Factory: returns a platform-appropriate concrete repository.
+     * Windows build → WindowsEventLogRepository.
+     * Non-Windows build → stub implementation (empty results).
+     */
+    static std::unique_ptr<ILogRepository> create();
+};
+
+} // namespace EventViewer

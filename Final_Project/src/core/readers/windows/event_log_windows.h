@@ -1,53 +1,42 @@
 /**
  * @file core/readers/windows/event_log_windows.h
- * @brief Windows Event Log API reader declarations
+ * @brief Windows Event Log reader — concrete ILogRepository (C++17)
  *
- * Direct implementation for reading Windows Event Logs using winevt.h API.
+ * SOLID changes vs C version:
+ *  - SRP : This class ONLY reads Windows Event Log. No stats, no export, no UI.
+ *  - LSP : Fully satisfies ILogRepository contract — substitutable anywhere.
+ *  - DIP : Callers hold ILogRepository* — they never see this class by name.
  *
- * @platform Windows Vista and later (requires wevtapi.dll)
- * @author EventLogReader Team
- * @date February 2026
- * @version 2.0
+ * C improvement:
+ *  - void* handle pattern (EVT_HANDLE cast) replaced with RAII wrapper.
+ *  - Separate Open/Read/Close functions collapsed into one safe read() method.
+ *  - Raw EventRecord** output pointer replaced with std::vector<EventRecord>.
  */
 
-#ifndef EVENT_LOG_WINDOWS_H
-#define EVENT_LOG_WINDOWS_H
+#pragma once
 
+#ifdef _WIN32
 #include <windows.h>
 #include <winevt.h>
-#include "core/types/event_record.h"
+#endif
 
-/**
- * @brief Opens a Windows Event Log channel for querying
- * @param log_name Wide-string channel name (e.g., L"Application", L"System")
- * @param hours_back Restrict query to events in last N hours; 0 = all events
- * @return EVT_HANDLE query handle cast to void*, or NULL on failure
- * @note Caller must pass handle to EventLog_Windows_Close() when done
- * @warning Security log requires administrator privileges
- */
-void *EventLog_Windows_Open(const wchar_t *log_name, int hours_back);
+#include "core/readers/log_repository.h"
 
-/**
- * @brief Reads events from a Windows Event Log query handle
- * @param handle Opaque EVT_HANDLE returned from EventLog_Windows_Open()
- * @param events Output: allocated array of EventRecord; caller must free each + the array
- * @param max_events Upper limit of events to return
- * @return Count of events populated in *events, or 0 on error
- */
-int EventLog_Windows_Read(void *handle, EventRecord **events, int max_events);
+namespace EventViewer {
 
-/**
- * @brief Computes event statistics for a Windows Event Log channel
- * @param log_name Wide-string channel name
- * @param hours_back Hours of history to include
- * @return Populated EventStatistics struct (zeroed on failure)
- */
-EventStatistics EventLog_Windows_GetStatistics(const wchar_t *log_name, int hours_back);
+class WindowsEventLogRepository final : public ILogRepository {
+public:
+    std::vector<EventRecord>  read(const wchar_t* logName,
+                                   int   hoursBack,
+                                   int   maxEvents) const override;
 
-/**
- * @brief Closes a Windows Event Log query handle
- * @param handle Opaque EVT_HANDLE to close
- */
-void EventLog_Windows_Close(void *handle);
+    std::vector<std::wstring> availableLogs() const override;
 
-#endif /* EVENT_LOG_WINDOWS_H */
+private:
+#ifdef _WIN32
+    static std::wstring buildXPathQuery(int hoursBack);
+    static EventRecord  parseEvent(EVT_HANDLE hEvent, EVT_HANDLE hCtx);
+#endif
+};
+
+} // namespace EventViewer
