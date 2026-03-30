@@ -1,27 +1,39 @@
 /**
  * @file data/import/csv_importer.h
- * @brief CSV file importer for saved event log records
+ * @brief CSV file importer for saved event records (C++17)
  *
- * Reads CSV files previously exported by CsvExporter and rebuilds
- * an EventRecord array. Separated from the exporter following SRP.
+ * SOLID changes vs C version:
+ *  - SRP : CsvImporter only parses CSV → EventRecord. No Windows API, no GTK.
+ *  - ISP : Import interface is separate from IEventExporter.
  *
- * @author EventLogReader Team
- * @date February 2026
- * @version 2.0
+ * C improvement:
+ *  - sscanf with fixed char[] buffers (overflow risk)  →  std::getline + state machine
+ *  - realloc on raw pointer  →  std::vector (safe, automatic)
+ *  - EventRecord** output pointer  →  returned std::vector<EventRecord>
+ *  - _strdup  →  std::string assignment
  */
 
-#ifndef CSV_IMPORTER_H
-#define CSV_IMPORTER_H
+#pragma once
 
+#include <string>
+#include <vector>
 #include "core/types/event_record.h"
 
-/**
- * @brief Loads event records from a CSV file
- * @param filename  Path to the CSV file to read
- * @param events    Output: heap-allocated EventRecord array; caller must free each + array
- * @return Number of records loaded, or 0 on failure
- * @note The first line (header row) is automatically skipped
- */
-int CsvImporter_Load(const char *filename, EventRecord **events);
+namespace EventViewer {
 
-#endif /* CSV_IMPORTER_H */
+class CsvImporter {
+public:
+    /**
+     * @brief Loads EventRecords from a CSV file.
+     * @return Vector of parsed records (empty on failure — never throws).
+     *
+     * C equivalent: CsvImporter_Load(filename, &events) returning int count.
+     * Caller no longer needs to free each record + the array.
+     */
+    std::vector<EventRecord> load(const std::string& path) const;
+
+private:
+    static std::vector<std::string> parseCsvRow(const std::string& line);
+};
+
+} // namespace EventViewer
