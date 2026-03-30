@@ -33,14 +33,14 @@ Course Code: 0714 02 CSE 2100 || Course Title: Advanced Programming Laboratory
 11. [Version Comparison](#11-version-comparison)
 12. [Architecture Differences](#12-architecture-differences)
 
-### Part D — Refactoring Documentation (Not Completed❌)
+### Part D — Refactoring Documentation (Completed✅)
 13. [AI Prompts Used](#13-ai-prompts-used)
 14. [SOLID Principles Analysis](#14-solid-principles-analysis)
 15. [Design Patterns Implemented](#15-design-patterns-implemented)
 16. [Detailed Change Log](#16-detailed-change-log)
 17. [Lessons Learned](#17-lessons-learned)
 
-### Part E — Appendices (Not Completed❌)
+### Part E — Appendices (Completed✅)
 18. [File Metrics Comparison](#18-file-metrics-comparison)
 19. [Dependency Flow Verification](#19-dependency-flow-verification)
 20. [Contact & References](#20-contact--references)
