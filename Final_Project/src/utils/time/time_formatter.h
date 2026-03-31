@@ -1,25 +1,27 @@
 /**
  * @file utils/time/time_formatter.h
- * @brief FILETIME → readable string utility (C++17)
+ * @brief FILETIME-to-string conversion utilities
  *
- * C improvement:
- *  - TimeFormatter_FiletimeToString() returned heap char* (caller must free)
- *  - Now returns std::string — no manual free, no leak.
+ * Converts Windows FILETIME values to human-readable local-time strings
+ * for display in the event viewer UI.
+ *
+ * @platform Windows (uses FileTimeToSystemTime, SystemTimeToTzSpecificLocalTime)
+ * @author EventLogReader Team
+ * @date February 2026
+ * @version 2.0
  */
 
-#pragma once
+#ifndef TIME_FORMATTER_H
+#define TIME_FORMATTER_H
 
-#include <string>
-#include <cstdint>
-
-namespace EventViewer::TimeFormatter {
+#include <windows.h>
 
 /**
- * @brief Converts a Windows FILETIME (as uint64_t) to a local-time string.
- * @return "MM/DD/YYYY HH:MM:SS" or "N/A" if ftVal is 0.
- *
- * C equivalent: char* TimeFormatter_FiletimeToString(ULONGLONG ftVal);
+ * @brief Converts a FILETIME value to a formatted local-time string
+ * @param ftVal FILETIME encoded as a ULONGLONG (100-nanosecond intervals since 1601)
+ * @return Heap-allocated string in "MM/DD/YYYY HH:MM:SS" format; caller must free()
+ * @note Returns a duplicate of "N/A" when ftVal is 0
  */
-std::string fileTimeToString(uint64_t ftVal);
+char *TimeFormatter_FiletimeToString(ULONGLONG ftVal);
 
-} // namespace EventViewer::TimeFormatter
+#endif /* TIME_FORMATTER_H */
