@@ -1,22 +1,33 @@
 /**
  * @file ui/gtk/windows/main_window.h
- * @brief Main application window creation
+ * @brief Main application window (C++17)
  *
- * @author EventLogReader Team
- * @date February 2026
- * @version 2.0
+ * C improvement:
+ *  - Free function MainWindow_Activate → static method MainWindow::activate
+ *  - Private helper functions declared in .cpp (not in header)
  */
 
-#ifndef MAIN_WINDOW_H
-#define MAIN_WINDOW_H
+#pragma once
 
+#include <gtk/gtk.h>
 #include "ui/gtk/event_viewer_context.h"
 
-/**
- * @brief GTK "activate" signal handler — creates and shows the main window
- * @param app       The GtkApplication instance
- * @param user_data Unused (NULL)
- */
-void MainWindow_Activate(GtkApplication *app, gpointer user_data);
+namespace EventViewer {
 
-#endif /* MAIN_WINDOW_H */
+class MainWindow {
+public:
+    /**
+     * @brief GTK "activate" signal handler — creates and shows the main window.
+     * @param app       The GtkApplication instance
+     * @param userData  Pointer to pre-built EventViewerContext (injected from main)
+     *
+     * C equivalent: void MainWindow_Activate(GtkApplication* app, gpointer user_data);
+     *
+     * DIP improvement: userData carries a pre-constructed EventViewerContext
+     * whose logRepository and eventExporter are already injected — main_window
+     * never instantiates concrete infrastructure classes.
+     */
+    static void activate(GtkApplication* app, gpointer userData);
+};
+
+} // namespace EventViewer

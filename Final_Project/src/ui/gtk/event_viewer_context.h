@@ -1,62 +1,63 @@
 /**
  * @file ui/gtk/event_viewer_context.h
- * @brief Shared application context passed between all UI modules
+ * @brief Shared application context (C++17)
  *
- * Contains all application state, GTK widget references, and data models
- * in a single unified structure.
+ * SOLID changes vs C version:
+ *  - SRP : Context is a pure data holder — no logic inside.
+ *  - DIP : Holds ILogRepository and IEventExporter by interface pointer,
+ *          not concrete Windows/CSV types.
  *
- * @author EventLogReader Team
- * @date February 2026
- * @version 2.0
+ * C improvement:
+ *  - Raw struct with char* current_log_name (manual strdup/free)
+ *    → std::string (automatic cleanup)
+ *  - EVT_HANDLE current_log_handle (manual EvtClose)
+ *    → managed inside ILogRepository — context no longer owns it
+ *  - g_malloc0(sizeof(EventViewerContext)) in C
+ *    → stack/unique_ptr construction in C++
  */
 
-#ifndef EVENT_VIEWER_CONTEXT_H
-#define EVENT_VIEWER_CONTEXT_H
+#pragma once
 
 #include <gtk/gtk.h>
+#include <string>
+#include <memory>
+#include "core/readers/log_repository.h"
+#include "data/export/csv_exporter.h"
 
-#ifdef _WIN32
-#include <windows.h>
-#include <winevt.h>
-#endif
+namespace EventViewer {
 
-/**
- * @brief Main application context containing all state and widgets
- *
- * This structure holds all GTK widgets, data models, and application state
- * in one unified object for easy access throughout the application.
- */
-typedef struct {
-    /* Application and main window */
-    GtkApplication *app;
-    GtkWidget      *window;
-    GtkWidget      *notebook;
-    
-    /* Tree view (sidebar) */
-    GtkWidget    *tree_view;
-    GtkTreeStore *tree_store;
+struct EventViewerContext {
+    // ── GTK application & main window ────────────────────────────────────
+    GtkApplication* app    = nullptr;
+    GtkWidget*      window = nullptr;
+    GtkWidget*      notebook = nullptr;
 
-    /* Admin events table */
-    GtkWidget    *admin_tree_view;
-    GtkListStore *admin_store;
+    // ── Sidebar tree ──────────────────────────────────────────────────────
+    GtkWidget*    treeView  = nullptr;
+    GtkTreeStore* treeStore = nullptr;
 
-    /* Recent nodes table */
-    GtkWidget    *recent_tree_view;
-    GtkListStore *recent_store;
+    // ── Overview tab tables ───────────────────────────────────────────────
+    GtkWidget*    adminTreeView = nullptr;
+    GtkListStore* adminStore    = nullptr;
 
-    /* Log summary table */
-    GtkWidget    *log_tree_view;
-    GtkListStore *log_store;
+    GtkWidget*    recentTreeView = nullptr;
+    GtkListStore* recentStore    = nullptr;
 
-    /* Event details view */
-    GtkWidget    *event_details_view;
-    GtkListStore *event_details_store;
-    
-    /* Application state */
-    char *current_log_name;
-#ifdef _WIN32
-    EVT_HANDLE current_log_handle;
-#endif
-} EventViewerContext;
+    GtkWidget*    logTreeView = nullptr;
+    GtkListStore* logStore    = nullptr;
 
-#endif /* EVENT_VIEWER_CONTEXT_H */
+    // ── Events tab ────────────────────────────────────────────────────────
+    GtkWidget*    eventDetailsView  = nullptr;
+    GtkListStore* eventDetailsStore = nullptr;
+
+    // ── Application state ─────────────────────────────────────────────────
+    std::string currentLogName;   // replaces char* + strdup/free
+
+    // ── Injected dependencies (DIP) ───────────────────────────────────────
+    // Held by raw observer pointer — lifetime owned by main().
+    // Keeps GTK C-style callbacks simple (no shared_ptr overhead in gpointer).
+    ILogRepository* logRepository = nullptr;   // replaces direct Windows API calls
+    IEventExporter* eventExporter = nullptr;   // replaces hard-coded CsvExporter_Export
+};
+
+} // namespace EventViewer
