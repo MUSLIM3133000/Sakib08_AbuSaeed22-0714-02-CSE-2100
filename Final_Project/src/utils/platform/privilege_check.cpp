@@ -1,31 +1,33 @@
 /**
- * @file utils/platform/privilege_check.c
- * @brief Windows administrator privilege detection implementation
- *
- * Uses AllocateAndInitializeSid to build the built-in Administrators SID,
- * then calls CheckTokenMembership to determine the process token's group
- * membership.
- *
- * @author EventLogReader Team
- * @date February 2026
- * @version 2.0
+ * @file utils/platform/privilege_check.cpp
+ * @brief Admin privilege check implementation (C++17)
  */
 
 #include "privilege_check.h"
 
-BOOL PlatformUtils_IsRunningAsAdmin(void) {
+#ifdef _WIN32
+#  include <windows.h>
+#endif
+
+namespace EventViewer::PlatformUtils {
+
+bool isRunningAsAdmin() noexcept {
+#ifdef _WIN32
     BOOL isAdmin = FALSE;
-    PSID adminGroup = NULL;
+    PSID adminGroup = nullptr;
     SID_IDENTIFIER_AUTHORITY ntAuthority = SECURITY_NT_AUTHORITY;
 
     if (AllocateAndInitializeSid(&ntAuthority, 2,
                                   SECURITY_BUILTIN_DOMAIN_RID,
                                   DOMAIN_ALIAS_RID_ADMINS,
-                                  0, 0, 0, 0, 0, 0,
-                                  &adminGroup)) {
-        CheckTokenMembership(NULL, adminGroup, &isAdmin);
+                                  0, 0, 0, 0, 0, 0, &adminGroup)) {
+        CheckTokenMembership(nullptr, adminGroup, &isAdmin);
         FreeSid(adminGroup);
     }
-
-    return isAdmin;
+    return isAdmin != FALSE;
+#else
+    return false;
+#endif
 }
+
+} // namespace EventViewer::PlatformUtils
