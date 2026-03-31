@@ -1,27 +1,22 @@
 /**
  * @file utils/conversion/string_utils.h
- * @brief String encoding conversion utilities
+ * @brief Wide-string / UTF-8 conversion utilities (C++17)
  *
- * Provides helpers for converting between Windows wide-character
- * strings (wchar_t) and UTF-8 strings required by GTK4.
- *
- * @platform Windows (uses WideCharToMultiByte)
- * @author EventLogReader Team
- * @date February 2026
- * @version 2.0
+ * C improvement:
+ *  - StringUtils_WcharToUtf8() returned heap char* (caller must free)
+ *  - Now returns std::string — automatic cleanup, no leak possible.
  */
 
-#ifndef STRING_UTILS_H
-#define STRING_UTILS_H
+#pragma once
 
-#include <windows.h>
+#include <string>
 
-/**
- * @brief Converts a wide-character string to a heap-allocated UTF-8 string
- * @param wstr Source wide-character string; may be NULL
- * @return Heap-allocated UTF-8 string; caller must free(). Never returns NULL.
- * @note Returns a duplicate of "" when wstr is NULL
- */
-char *StringUtils_WcharToUtf8(const wchar_t *wstr);
+namespace EventViewer::StringUtils {
 
-#endif /* STRING_UTILS_H */
+/** Converts wchar_t* → UTF-8 std::string. Returns "" for nullptr input. */
+std::string wcharToUtf8(const wchar_t* wstr);
+
+/** Converts std::string (UTF-8) → std::wstring. */
+std::wstring utf8ToWchar(const std::string& str);
+
+} // namespace EventViewer::StringUtils
