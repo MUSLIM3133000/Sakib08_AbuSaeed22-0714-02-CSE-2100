@@ -1,44 +1,38 @@
 /**
- * @file utils/time/time_formatter.cpp
- * @brief TimeFormatter implementation (C++17)
+ * @file utils/time/time_formatter.c
+ * @brief FILETIME-to-string conversion implementation
+ *
+ * Converts raw Windows FILETIME values to readable timestamps by:
+ * 1. Splitting the ULONGLONG into high/low DWORD parts
+ * 2. Converting UTC FILETIME → SYSTEMTIME via FileTimeToSystemTime
+ * 3. Converting UTC → local time via SystemTimeToTzSpecificLocalTime
+ * 4. Formatting with sprintf
+ *
+ * @author EventLogReader Team
+ * @date February 2026
+ * @version 2.0
  */
 
 #include "time_formatter.h"
-#include <cstdio>
-#include <ctime>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#ifdef _WIN32
-#  include <windows.h>
-#endif
+char *TimeFormatter_FiletimeToString(ULONGLONG ftVal) {
+    if (ftVal == 0) return _strdup("N/A");
 
-namespace EventViewer::TimeFormatter {
-
-std::string fileTimeToString(uint64_t ftVal) {
-    if (ftVal == 0) return "N/A";
-
-#ifdef _WIN32
     FILETIME ft;
-    ft.dwLowDateTime  = static_cast<DWORD>(ftVal & 0xFFFFFFFF);
-    ft.dwHighDateTime = static_cast<DWORD>(ftVal >> 32);
+    ft.dwLowDateTime  = (DWORD)ftVal;
+    ft.dwHighDateTime = (DWORD)(ftVal >> 32);
 
-    SYSTEMTIME stUTC{}, stLocal{};
+    SYSTEMTIME stUTC, stLocal;
     FileTimeToSystemTime(&ft, &stUTC);
-    SystemTimeToTzSpecificLocalTime(nullptr, &stUTC, &stLocal);
+    SystemTimeToTzSpecificLocalTime(NULL, &stUTC, &stLocal);
 
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%02d/%02d/%04d %02d:%02d:%02d",
-             stLocal.wMonth, stLocal.wDay, stLocal.wYear,
-             stLocal.wHour, stLocal.wMinute, stLocal.wSecond);
-    return buf;
-#else
-    // Portable: convert 100-ns intervals from 1601 to Unix epoch
-    constexpr uint64_t EPOCH_DIFF = 116444736000000000ULL;
-    time_t unix = static_cast<time_t>((ftVal - EPOCH_DIFF) / 10000000ULL);
-    struct tm* t = localtime(&unix);
-    char buf[32];
-    strftime(buf, sizeof(buf), "%m/%d/%Y %H:%M:%S", t);
-    return buf;
-#endif
+    char buf[64];
+    sprintf(buf, "%02d/%02d/%04d %02d:%02d:%02d",
+            stLocal.wMonth, stLocal.wDay, stLocal.wYear,
+            stLocal.wHour, stLocal.wMinute, stLocal.wSecond);
+
+    return _strdup(buf);
 }
-
-} // namespace EventViewer::TimeFormatter
