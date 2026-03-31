@@ -1,43 +1,50 @@
 /**
  * @file ui/gtk/callbacks/action_handlers.h
- * @brief GTK4 action and signal callback declarations
+ * @brief GTK4 action and signal callbacks — C++17 refactor
  *
- * All on_* signal handlers and GAction callbacks are declared here.
- * Following GTK naming conventions: on_<object>_<signal>.
+ * SOLID changes vs C version:
+ *  - SRP : ActionHandlers only wires GTK signals → service calls.
+ *          No CSV parsing, no Windows API, no file I/O inline.
+ *  - DIP : File open/save uses ctx->eventExporter (IEventExporter*).
+ *          The hard-coded CsvExporter_Export() call is gone.
+ *  - OCP : Swapping the exporter (CSV → JSON) requires zero changes here —
+ *          just set ctx->eventExporter to a different IEventExporter.
  *
- * @author EventLogReader Team
- * @date February 2026
- * @version 2.0
+ * C improvement:
+ *  - Global free functions (C linkage)  →  static methods of ActionHandlers
+ *  - File-reading CSV parsing inline in OnOpenLogResponse
+ *    →  delegates to CsvImporter::load() (SRP)
+ *  - Hard-coded CsvExporter_Export() in OnSaveLogResponse
+ *    →  delegates to ctx->eventExporter->exportEvents() (DIP)
  */
 
-#ifndef ACTION_HANDLERS_H
-#define ACTION_HANDLERS_H
+#pragma once
 
 #include <gtk/gtk.h>
 #include "ui/gtk/event_viewer_context.h"
 
-/* ---- GAction callbacks (wired to GtkApplication via app_entries) ---- */
+namespace EventViewer {
 
-void ActionHandlers_OnQuit        (GSimpleAction *action, GVariant *parameter, gpointer user_data);
-void ActionHandlers_OnAbout       (GSimpleAction *action, GVariant *parameter, gpointer user_data);
-void ActionHandlers_OnRefresh     (GSimpleAction *action, GVariant *parameter, gpointer user_data);
-void ActionHandlers_OnOpenLog     (GSimpleAction *action, GVariant *parameter, gpointer user_data);
-void ActionHandlers_OnSaveLog     (GSimpleAction *action, GVariant *parameter, gpointer user_data);
-void ActionHandlers_OnCreateView  (GSimpleAction *action, GVariant *parameter, gpointer user_data);
-void ActionHandlers_OnImportView  (GSimpleAction *action, GVariant *parameter, gpointer user_data);
+class ActionHandlers {
+public:
+    // ── GAction callbacks ─────────────────────────────────────────────────
+    static void onQuit       (GSimpleAction*, GVariant*, gpointer userData);
+    static void onAbout      (GSimpleAction*, GVariant*, gpointer userData);
+    static void onRefresh    (GSimpleAction*, GVariant*, gpointer userData);
+    static void onOpenLog    (GSimpleAction*, GVariant*, gpointer userData);
+    static void onSaveLog    (GSimpleAction*, GVariant*, gpointer userData);
+    static void onCreateView (GSimpleAction*, GVariant*, gpointer userData);
+    static void onImportView (GSimpleAction*, GVariant*, gpointer userData);
 
-/* ---- GTK signal callbacks ---- */
+    // ── GTK signal callbacks ──────────────────────────────────────────────
+    static void onTreeSelectionChanged(GtkTreeSelection* selection,
+                                       gpointer          userData);
 
-/**
- * @brief Fires when the sidebar tree selection changes
- * @param selection The GtkTreeSelection that changed
- * @param user_data Pointer to EventViewerContext
- */
-void ActionHandlers_OnTreeSelectionChanged(GtkTreeSelection *selection, gpointer user_data);
+    // ── File-dialog response callbacks ────────────────────────────────────
+    static void onOpenLogResponse(GtkDialog* dialog, int responseId,
+                                  gpointer   userData);
+    static void onSaveLogResponse(GtkDialog* dialog, int responseId,
+                                  gpointer   userData);
+};
 
-/* ---- File-dialog response callbacks ---- */
-
-void ActionHandlers_OnOpenLogResponse(GtkDialog *dialog, int response_id, gpointer user_data);
-void ActionHandlers_OnSaveLogResponse(GtkDialog *dialog, int response_id, gpointer user_data);
-
-#endif /* ACTION_HANDLERS_H */
+} // namespace EventViewer

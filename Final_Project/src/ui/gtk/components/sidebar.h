@@ -1,23 +1,26 @@
 /**
  * @file ui/gtk/components/sidebar.h
- * @brief GTK4 sidebar tree-view component
+ * @brief GTK4 sidebar tree-view component (C++17)
  *
- * @author EventLogReader Team
- * @date February 2026
- * @version 2.0
+ * C improvement: Free function → static factory method, namespaced.
  */
 
-#ifndef SIDEBAR_H
-#define SIDEBAR_H
+#pragma once
 
+#include <gtk/gtk.h>
 #include "ui/gtk/event_viewer_context.h"
 
-/**
- * @brief Creates the left-hand sidebar with the log hierarchy tree
- * @param ctx Pointer to the shared application context
- *            (sets ctx->tree_view and ctx->tree_store)
- * @return Newly created GtkWidget (scrolled window containing the tree)
- */
-GtkWidget *Sidebar_Create(EventViewerContext *ctx);
+namespace EventViewer {
 
-#endif /* SIDEBAR_H */
+class Sidebar {
+public:
+    /**
+     * @brief Creates the sidebar scrolled window containing the log tree view.
+     * Sets ctx->treeView and ctx->treeStore.
+     *
+     * C equivalent: GtkWidget* Sidebar_Create(EventViewerContext* ctx);
+     */
+    static GtkWidget* create(EventViewerContext* ctx);
+};
+
+} // namespace EventViewer

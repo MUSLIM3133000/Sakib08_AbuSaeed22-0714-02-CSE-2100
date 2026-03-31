@@ -1,26 +1,26 @@
 /**
  * @file ui/gtk/components/menu_bar.h
- * @brief GTK4 menu bar component
+ * @brief GTK4 menu bar component (C++17)
  *
- * Constructs and returns the application menu bar widget.
- * Isolated here so it can be modified without touching the
- * main window layout.
- *
- * @author EventLogReader Team
- * @date February 2026
- * @version 2.0
+ * C improvement: Free function → static factory method, namespaced.
  */
 
-#ifndef MENU_BAR_H
-#define MENU_BAR_H
+#pragma once
 
+#include <gtk/gtk.h>
 #include "ui/gtk/event_viewer_context.h"
 
-/**
- * @brief Creates the application menu bar
- * @param ctx Pointer to the shared application context
- * @return Newly created GtkWidget (menu bar); owned by the parent container
- */
-GtkWidget *MenuBar_Create(EventViewerContext *ctx);
+namespace EventViewer {
 
-#endif /* MENU_BAR_H */
+class MenuBar {
+public:
+    /**
+     * @brief Creates and returns the application menu bar widget.
+     * @param ctx  Context pointer (reserved for future dynamic menu items).
+     *
+     * C equivalent: GtkWidget* MenuBar_Create(EventViewerContext* ctx);
+     */
+    static GtkWidget* create(EventViewerContext* ctx);
+};
+
+} // namespace EventViewer

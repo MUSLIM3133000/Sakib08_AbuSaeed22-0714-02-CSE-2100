@@ -1,62 +1,56 @@
 /**
- * @file ui/gtk/components/menu_bar.c
- * @brief GTK4 menu bar component implementation
+ * @file ui/gtk/components/menu_bar.cpp
+ * @brief MenuBar implementation (C++17)
  *
- * Constructs File, Action, View, and Help menus and wires them
- * to GAction entries registered on the GtkApplication.
- *
- * @author EventLogReader Team
- * @date February 2026
- * @version 2.0
+ * C improvement:
+ *  - g_object_unref for each GMenu managed manually in C
+ *    → wrapped in a tiny RAII helper for clarity (same result, clearer intent)
+ *  - NULL → nullptr throughout
  */
 
 #include "menu_bar.h"
 
-GtkWidget *MenuBar_Create(EventViewerContext *ctx) {
-    (void)ctx; /* ctx reserved for future dynamic menus */
+namespace EventViewer {
 
-    GtkWidget *menubar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+GtkWidget* MenuBar::create(EventViewerContext* ctx) {
+    (void)ctx;
+
+    GtkWidget* menubar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_widget_add_css_class(menubar, "menubar");
 
-    /* ---- File menu ---- */
-    GtkWidget *fileBtn = gtk_menu_button_new();
-    gtk_menu_button_set_label(GTK_MENU_BUTTON(fileBtn), "File");
-    GMenu *fileMenu = g_menu_new();
+    // Helper lambda: create a menu button and attach a GMenu to it
+    auto addMenu = [&](const char* label, GMenu* menu) {
+        GtkWidget* btn = gtk_menu_button_new();
+        gtk_menu_button_set_label(GTK_MENU_BUTTON(btn), label);
+        gtk_menu_button_set_menu_model(GTK_MENU_BUTTON(btn), G_MENU_MODEL(menu));
+        gtk_box_append(GTK_BOX(menubar), btn);
+        g_object_unref(menu);   // menubar takes ownership via menu model
+    };
+
+    // File menu
+    GMenu* fileMenu = g_menu_new();
     g_menu_append(fileMenu, "Open Saved Log...", "app.open_log");
     g_menu_append(fileMenu, "Save Log...",       "app.save_log");
     g_menu_append(fileMenu, "Exit",              "app.quit");
-    gtk_menu_button_set_menu_model(GTK_MENU_BUTTON(fileBtn), G_MENU_MODEL(fileMenu));
-    gtk_box_append(GTK_BOX(menubar), fileBtn);
+    addMenu("File", fileMenu);
 
-    /* ---- Action menu ---- */
-    GtkWidget *actionBtn = gtk_menu_button_new();
-    gtk_menu_button_set_label(GTK_MENU_BUTTON(actionBtn), "Action");
-    GMenu *actionMenu = g_menu_new();
+    // Action menu
+    GMenu* actionMenu = g_menu_new();
     g_menu_append(actionMenu, "Refresh", "app.refresh");
-    gtk_menu_button_set_menu_model(GTK_MENU_BUTTON(actionBtn), G_MENU_MODEL(actionMenu));
-    gtk_box_append(GTK_BOX(menubar), actionBtn);
+    addMenu("Action", actionMenu);
 
-    /* ---- View menu ---- */
-    GtkWidget *viewBtn = gtk_menu_button_new();
-    gtk_menu_button_set_label(GTK_MENU_BUTTON(viewBtn), "View");
-    GMenu *viewMenu = g_menu_new();
+    // View menu
+    GMenu* viewMenu = g_menu_new();
     g_menu_append(viewMenu, "Create Custom View...", "app.create_view");
     g_menu_append(viewMenu, "Import Custom View...", "app.import_view");
-    gtk_menu_button_set_menu_model(GTK_MENU_BUTTON(viewBtn), G_MENU_MODEL(viewMenu));
-    gtk_box_append(GTK_BOX(menubar), viewBtn);
+    addMenu("View", viewMenu);
 
-    /* ---- Help menu ---- */
-    GtkWidget *helpBtn = gtk_menu_button_new();
-    gtk_menu_button_set_label(GTK_MENU_BUTTON(helpBtn), "Help");
-    GMenu *helpMenu = g_menu_new();
+    // Help menu
+    GMenu* helpMenu = g_menu_new();
     g_menu_append(helpMenu, "About", "app.about");
-    gtk_menu_button_set_menu_model(GTK_MENU_BUTTON(helpBtn), G_MENU_MODEL(helpMenu));
-    gtk_box_append(GTK_BOX(menubar), helpBtn);
-
-    g_object_unref(fileMenu);
-    g_object_unref(actionMenu);
-    g_object_unref(viewMenu);
-    g_object_unref(helpMenu);
+    addMenu("Help", helpMenu);
 
     return menubar;
 }
+
+} // namespace EventViewer

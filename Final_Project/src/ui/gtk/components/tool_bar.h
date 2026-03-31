@@ -1,22 +1,25 @@
 /**
  * @file ui/gtk/components/tool_bar.h
- * @brief GTK4 toolbar component
+ * @brief GTK4 toolbar component (C++17)
  *
- * @author EventLogReader Team
- * @date February 2026
- * @version 2.0
+ * C improvement: Free function → static factory method, namespaced.
  */
 
-#ifndef TOOL_BAR_H
-#define TOOL_BAR_H
+#pragma once
 
+#include <gtk/gtk.h>
 #include "ui/gtk/event_viewer_context.h"
 
-/**
- * @brief Creates the application toolbar
- * @param ctx Pointer to the shared application context
- * @return Newly created GtkWidget (toolbar)
- */
-GtkWidget *ToolBar_Create(EventViewerContext *ctx);
+namespace EventViewer {
 
-#endif /* TOOL_BAR_H */
+class ToolBar {
+public:
+    /**
+     * @brief Creates and returns the application toolbar widget.
+     *
+     * C equivalent: GtkWidget* ToolBar_Create(EventViewerContext* ctx);
+     */
+    static GtkWidget* create(EventViewerContext* ctx);
+};
+
+} // namespace EventViewer
