@@ -1,41 +1,29 @@
 /**
- * @file utils/conversion/string_utils.cpp
- * @brief String conversion implementation (C++17)
+ * @file utils/conversion/string_utils.c
+ * @brief String encoding conversion implementation
+ *
+ * Uses WideCharToMultiByte to convert wchar_t* to UTF-8 char*.
+ * This adapter is necessary because Windows Event Log API returns
+ * wide strings while GTK4 widgets expect UTF-8.
+ *
+ * @author EventLogReader Team
+ * @date February 2026
+ * @version 2.0
  */
 
 #include "string_utils.h"
+#include <stdlib.h>
+#include <string.h>
 
-#ifdef _WIN32
-#  include <windows.h>
-#endif
+char *StringUtils_WcharToUtf8(const wchar_t *wstr) {
+    if (!wstr) return _strdup("");
 
-namespace EventViewer::StringUtils {
+    /* First call: calculate the required buffer size */
+    int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, wstr, -1,
+                                          NULL, 0, NULL, NULL);
+    char *str = (char *)malloc((size_t)sizeNeeded);
+    if (!str) return _strdup("");
 
-std::string wcharToUtf8(const wchar_t* wstr) {
-    if (!wstr || wstr[0] == L'\0') return {};
-#ifdef _WIN32
-    int n = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, nullptr, 0, nullptr, nullptr);
-    if (n <= 0) return {};
-    std::string result(static_cast<size_t>(n - 1), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, wstr, -1, result.data(), n, nullptr, nullptr);
-    return result;
-#else
-    // Portable fallback: assume ASCII-range wchar_t
-    return std::string(wstr, wstr + wcslen(wstr));
-#endif
+    WideCharToMultiByte(CP_UTF8, 0, wstr, -1, str, sizeNeeded, NULL, NULL);
+    return str;
 }
-
-std::wstring utf8ToWchar(const std::string& str) {
-    if (str.empty()) return {};
-#ifdef _WIN32
-    int n = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, nullptr, 0);
-    if (n <= 0) return {};
-    std::wstring result(static_cast<size_t>(n - 1), L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, result.data(), n);
-    return result;
-#else
-    return std::wstring(str.begin(), str.end());
-#endif
-}
-
-} // namespace EventViewer::StringUtils
