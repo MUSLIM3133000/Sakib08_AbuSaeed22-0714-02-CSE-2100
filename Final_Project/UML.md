@@ -1,31 +1,44 @@
 # SOLID Principles — UML Diagram
-## Windows Event Viewer (Refactored)
 
 ---
 
 ## 1. Single Responsibility Principle (SRP)
-> *Each module has one focused reason to change.*
+> *Each class has one focused reason to change.*
 
 ```
-┌─────────────────────┐   ┌─────────────────────┐   ┌─────────────────────┐
-│    «module»         │   │    «module»         │   │    «module»         │
-│    main.c           │   │   event_record.c    │   │  event_statistics.c │
-│─────────────────────│   │─────────────────────│   │─────────────────────│
-│ + main()            │   │ + EventRecord_Free()│   │ + compute_stats()   │
-│─────────────────────│   │─────────────────────│   │─────────────────────│
-│ Responsibility:     │   │ Responsibility:     │   │ Responsibility:     │
-│ App entry point     │   │ Data type lifecycle │   │ Event analysis      │
-└─────────────────────┘   └─────────────────────┘   └─────────────────────┘
+┌──────────────────────────┐   ┌──────────────────────────┐   ┌──────────────────────────┐
+│      «class»             │   │      «class»             │   │      «class»             │
+│      main.cpp            │   │      EventRecord         │   │ EventStatisticsCalculator│
+│──────────────────────────│   │──────────────────────────│   │──────────────────────────│
+│ + main()                 │   │ - m_eventId: uint32_t    │   │ + calculate(logName,     │
+│                          │   │ - m_level: EventLevel    │   │     hoursBack)           │
+│──────────────────────────│   │ - m_source: string       │   │   : EventStatistics      │
+│ Responsibility:          │   │ - m_message: string      │   │──────────────────────────│
+│ Composition root only.   │   │ - m_timestamp: string    │   │ Responsibility:          │
+│ Wires dependencies and   │   │──────────────────────────│   │ Aggregate event counts   │
+│ starts GTK. No business  │   │ + eventId(): uint32_t    │   │ from a log channel.      │
+│ logic.                   │   │ + level(): EventLevel    │   │ No Windows API exposure  │
+└──────────────────────────┘   │ + source(): string       │   │ to callers.              │
+                               │ + message(): string      │   └──────────────────────────┘
+                               │ + levelString(): char*   │
+                               │──────────────────────────│
+                               │ Responsibility:          │
+                               │ Pure data object.        │
+                               │ No I/O, no Windows API.  │
+                               └──────────────────────────┘
 
-┌─────────────────────┐   ┌─────────────────────┐   ┌─────────────────────┐
-│    «module»         │   │    «module»         │   │    «module»         │
-│  time_formatter.c   │   │   string_utils.c    │   │  privilege_check.c  │
-│─────────────────────│   │─────────────────────│   │─────────────────────│
-│+FiletimeToString()  │   │+WcharToUtf8()       │   │+IsRunAsAdmin()      │
-│─────────────────────│   │─────────────────────│   │─────────────────────│
-│ Responsibility:     │   │ Responsibility:     │   │ Responsibility:     │
-│ Time formatting     │   │ String conversion   │   │ Privilege detection │
-└─────────────────────┘   └─────────────────────┘   └─────────────────────┘
+┌──────────────────────────┐   ┌──────────────────────────┐   ┌──────────────────────────┐
+│      «class»             │   │      «class»             │   │      «class»             │
+│    TimeFormatter         │   │     StringUtils          │   │    PrivilegeCheck        │
+│   (time_formatter.cpp)   │   │   (string_utils.cpp)     │   │  (privilege_check.cpp)   │
+│──────────────────────────│   │──────────────────────────│   │──────────────────────────│
+│ + filetimeToString(      │   │ + wcharToUtf8(           │   │ + isRunAsAdmin(): bool   │
+│     FILETIME): string    │   │     wstring): string     │   │──────────────────────────│
+│──────────────────────────│   │──────────────────────────│   │ Responsibility:          │
+│ Responsibility:          │   │ Responsibility:          │   │ Detect admin privilege.  │
+│ FILETIME → readable      │   │ Wide string <-> UTF-8    │   │ Nothing else.            │
+│ timestamp string only.   │   │ conversion only.         │   └──────────────────────────┘
+└──────────────────────────┘   └──────────────────────────┘
 ```
 
 ---
@@ -34,188 +47,243 @@
 > *Open for extension (new export formats), closed for modification.*
 
 ```
-         ┌──────────────────────────────┐
-         │        «interface»           │
-         │       ExportStrategy         │
-         │──────────────────────────────│
-         │ + export(records, path): int │
-         └──────────────┬───────────────┘
-                        │
-           ┌────────────┴────────────┐
-           │                         │
-           ▼                         ▼
-┌──────────────────────┐   ┌──────────────────────┐
-│    «module»          │   │    «module»          │
-│    csv_exporter.c    │   │  (future)            │
-│──────────────────────│   │  json_exporter.c     │
-│ + export_to_csv()    │   │──────────────────────│
-│                      │   │ + export_to_json()   │
-│ ← extends strategy   │   │                      │
-│   without changing   │   │ ← added without      │
-│   existing code      │   │   touching exporter.c│
-└──────────────────────┘   └──────────────────────┘
+              ┌───────────────────────────────────────┐
+              │            «interface»                │
+              │           IEventExporter              │
+              │───────────────────────────────────────│
+              │ + exportEvents(path: string,          │
+              │     events: vector<EventRecord>)      │
+              │     : bool                            │
+              │ + formatName()    : string            │
+              │ + fileExtension() : string            │
+              └──────────────────┬────────────────────┘
+                                 │  implements
+              ┌──────────────────┴────────────────────┐
+              │                                       │
+              ▼                                       ▼
+┌─────────────────────────────┐       ┌─────────────────────────────┐
+│        «class»              │       │      «class» (future)       │
+│       CsvExporter           │       │       JsonExporter          │
+│─────────────────────────────│       │─────────────────────────────│
+│ + exportEvents(...): bool   │       │ + exportEvents(...): bool   │
+│ + formatName(): "CSV"       │       │ + formatName(): "JSON"      │
+│ + fileExtension(): "csv"    │       │ + fileExtension(): "json"   │
+│─────────────────────────────│       │─────────────────────────────│
+│ - quoteField(s): string     │       │ Added without modifying     │
+│                             │       │ CsvExporter or any caller.  │
+└─────────────────────────────┘       └─────────────────────────────┘
 
-  New formats can be added (open for extension)
-  without modifying csv_exporter.c (closed for modification)
+  ActionHandlers calls ctx->eventExporter->exportEvents() via IEventExporter*.
+  Swapping CSV → JSON = change one line in main.cpp only.
 ```
 
 ---
 
 ## 3. Liskov Substitution Principle (LSP)
-> *Any EventLogRepository implementation is substitutable for another.*
+> *Any ILogRepository implementation can be substituted without breaking callers.*
 
 ```
-         ┌──────────────────────────────────────┐
-         │          «struct / interface»        │
-         │          EventLogRepository          │
-         │──────────────────────────────────────│
-         │ name            : const char*        │
-         │ open()          : void*              │
-         │ read()          : int                │
-         │ get_statistics(): EventStatistics    │
-         │ close()         : void               │
-         └──────────────────┬───────────────────┘
-                            │
-           ┌────────────────┴────────────────┐
-           │                                 │
-           ▼                                 ▼
-┌─────────────────────────┐       ┌──────────────────────────┐
-│  «concrete impl»        │       │  «concrete impl»         │
-│  event_log_windows.c    │       │  csv_importer.c          │
-│─────────────────────────│       │──────────────────────────│
-│ g_windowsRepository     │       │ g_csvRepository          │
-│─────────────────────────│       │──────────────────────────│
-│ + EventLog_Windows_Open │       │ + CsvImporter_Open()     │
-│ + EventLog_Windows_Read │       │ + CsvImporter_Read()     │
-│ + EventLog_Windows_     │       │ + CsvImporter_GetStats() │
-│     GetStatistics()     │       │ + CsvImporter_Close()    │
-│ + EventLog_Windows_     │       │                          │
-│     Close()             │       │                          │
-└─────────────────────────┘       └──────────────────────────┘
+              ┌───────────────────────────────────────────┐
+              │              «abstract class»             │
+              │             ILogRepository                │
+              │───────────────────────────────────────────│
+              │ + read(logName: wchar_t*,                 │
+              │     hoursBack: int,                       │
+              │     maxEvents: int)                       │
+              │     : vector<EventRecord>   (pure virtual)│
+              │ + availableLogs()                         │
+              │     : vector<wstring>       (pure virtual)│
+              │ + ~ILogRepository()         (virtual)     │
+              │───────────────────────────────────────────│
+              │ [static] + create()                       │
+              │     : unique_ptr<ILogRepository>          │
+              │   Returns WindowsEventLogRepository on    │
+              │   Windows; stub on other platforms.       │
+              └──────────────────┬────────────────────────┘
+                                 │  implements
+              ┌──────────────────┴────────────────────┐
+              │                                       │
+              ▼                                       ▼
+┌──────────────────────────────┐    ┌──────────────────────────────┐
+│          «class»             │    │       «class» (future)       │
+│  WindowsEventLogRepository   │    │      CsvLogRepository        │
+│──────────────────────────────│    │──────────────────────────────│
+│ + read(...):                 │    │ + read(...):                 │
+│     vector<EventRecord>      │    │     vector<EventRecord>      │
+│ + availableLogs():           │    │ + availableLogs():           │
+│     vector<wstring>          │    │     vector<wstring>          │
+│──────────────────────────────│    │──────────────────────────────│
+│ Uses EvtQuery / EvtNext /    │    │ Reads from a CSV file via    │
+│ EvtRender (winevt.h).        │    │ CsvImporter::load().         │
+└──────────────────────────────┘    └──────────────────────────────┘
 
-  UI code calls only EventLogRepository* — both implementations
-  can be swapped in without breaking the caller (LSP satisfied).
+  Callers (EventModels, ActionHandlers) hold ILogRepository* only.
+  Either concrete class can be substituted — same contract, no caller changes.
+  LSP is upheld: read() never throws, always returns a valid (possibly empty) vector.
 ```
 
 ---
 
 ## 4. Interface Segregation Principle (ISP)
-> *God-struct decomposed into focused, role-specific structs.*
+> *Focused interfaces — no class is forced to depend on methods it does not use.*
 
-### Before (Violation — one monolithic struct):
+### Separate interfaces per role:
 ```
-┌──────────────────────────────────────┐
-│       AppContext  (god struct)       │
-│──────────────────────────────────────│
-│ window, header_bar, search_entry,    │
-│ log_combo, level_combo, event_list,  │
-│ status_bar, current_log[], filter,   │
-│ list_store, selection, model ...     │
-│  (all mixed together — 20+ fields)   │
-└──────────────────────────────────────┘
+┌───────────────────────────────────┐    ┌───────────────────────────────────┐
+│          «interface»              │    │           «class»                 │
+│         IEventExporter            │    │          CsvImporter              │
+│───────────────────────────────────│    │───────────────────────────────────│
+│ + exportEvents(path, events): bool│    │ + load(path: string)             │
+│ + formatName()    : string        │    │     : vector<EventRecord>        │
+│ + fileExtension() : string        │    │───────────────────────────────────│
+│───────────────────────────────────│    │ - parseCsvRow(line: string)      │
+│ Consumers: ActionHandlers         │    │     : vector<string>             │
+│ (save/export only)                │    │───────────────────────────────────│
+│ Does NOT include read or import.  │    │ Consumers: ActionHandlers (import)│
+└───────────────────────────────────┘    │ Does NOT include export.          │
+                                         └───────────────────────────────────┘
+
+┌───────────────────────────────────┐    ┌───────────────────────────────────┐
+│          «interface»              │    │          «interface»              │
+│         ILogRepository            │    │      IStatisticsCalculator        │
+│───────────────────────────────────│    │───────────────────────────────────│
+│ + read(...): vector<EventRecord>  │    │ + calculate(logName, hoursBack)  │
+│ + availableLogs(): vector<wstring>│    │     : EventStatistics            │
+│───────────────────────────────────│    │───────────────────────────────────│
+│ Consumers: EventModels,           │    │ Consumers: ActionHandlers        │
+│ ActionHandlers.                   │    │ Stats only — no read, no export. │
+│ Read operations only.             │    └───────────────────────────────────┘
+│ No stats, no export, no import.   │
+└───────────────────────────────────┘
+
+  Each interface covers one role. No consumer is forced to depend on methods
+  it does not call.
 ```
 
-### After (ISP satisfied — three focused structs):
+### EventViewerContext — focused dependency carrier:
 ```
-┌───────────────────────┐  ┌───────────────────────┐  ┌───────────────────────┐
-│  «struct»             │  │  «struct»             │  │  «struct»             │
-│  MainWindow           │  │  EventModels          │  │  AppState             │
-│───────────────────────│  │───────────────────────│  │───────────────────────│
-│ window: GtkWidget*    │  │ list_store: GListStore │  │ current_log: wchar_t[]│
-│ header_bar: GtkWidget*│  │ selection: GtkSingle  │  │ filter_level: int     │
-│ search_entry: ...     │  │   SelectionModel*     │  │ hours_back: int       │
-│ log_combo: ...        │  │───────────────────────│  │ repo: EventLog        │
-│ level_combo: ...      │  │ Owns: GTK data model  │  │   Repository*         │
-│ event_list: ...       │  │ population only       │  │───────────────────────│
-│ status_bar: ...       │  └───────────────────────┘  │ Owns: runtime state   │
-│───────────────────────│                              │ only                  │
-│ Owns: layout widgets  │                              └───────────────────────┘
-│ only                  │
-└───────────────────────┘
-
-  Each consumer depends only on the struct it actually needs.
+┌──────────────────────────────────────────────────────────────┐
+│                  «struct»  EventViewerContext                │
+│                   (event_viewer_context.h)                   │
+│──────────────────────────────────────────────────────────────│
+│ GTK widgets:                                                 │
+│   app: GtkApplication*      window: GtkWidget*              │
+│   notebook: GtkWidget*      treeView: GtkWidget*            │
+│   treeStore: GtkTreeStore*                                   │
+│   adminTreeView / adminStore: GtkWidget* / GtkListStore*    │
+│   recentTreeView / recentStore: GtkWidget* / GtkListStore*  │
+│   logTreeView / logStore: GtkWidget* / GtkListStore*        │
+│   eventDetailsView / eventDetailsStore                       │
+│──────────────────────────────────────────────────────────────│
+│ Application state:                                           │
+│   currentLogName: std::string   (replaces char* + strdup)   │
+│──────────────────────────────────────────────────────────────│
+│ Injected dependencies (interface pointers — DIP):           │
+│   logRepository: ILogRepository*   ← never a concrete type  │
+│   eventExporter: IEventExporter*   ← never a concrete type  │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## 5. Dependency Inversion Principle (DIP)
-> *UI depends on the abstract repository, not on the Windows API.*
+> *High-level modules depend on abstractions, not on concrete platform code.*
 
 ```
-  HIGH-LEVEL (UI Layer)                ABSTRACTION                LOW-LEVEL (Platform Layer)
-  ─────────────────────                ───────────────            ──────────────────────────
+  HIGH-LEVEL (UI Layer)              ABSTRACTIONS               LOW-LEVEL (Infrastructure)
+  ─────────────────────              ────────────               ──────────────────────────
 
-  ┌──────────────────────┐             ┌─────────────────────┐   ┌─────────────────────────┐
-  │  action_handlers.c   │             │  «interface»        │   │  event_log_windows.c    │
-  │──────────────────────│   depends   │  EventLogRepository │   │─────────────────────────│
-  │ on_refresh_clicked() │────────────▶│─────────────────────│◀──│ g_windowsRepository     │
-  │ on_export_clicked()  │     on      │ open()              │   │ (EvtQuery / EvtNext /   │
-  │ on_log_changed()     │  abstraction│ read()              │   │  EvtRender)             │
-  └──────────────────────┘             │ get_statistics()    │   └─────────────────────────┘
-                                       │ close()             │
-  ┌──────────────────────┐             │─────────────────────│   ┌─────────────────────────┐
-  │  main_window.c       │             │ NOT on concrete     │   │  csv_importer.c         │
-  │──────────────────────│────────────▶│ Windows API         │◀──│─────────────────────────│
-  │ setup_ui()           │             └─────────────────────┘   │ g_csvRepository         │
-  │ bind_repository()    │                                        │ (FILE* / fgets / sscanf)│
-  └──────────────────────┘                                        └─────────────────────────┘
+  ┌─────────────────────┐           ┌──────────────────────┐   ┌──────────────────────────┐
+  │     «class»         │  depends  │    «interface»       │   │       «class»            │
+  │   ActionHandlers    │──────────▶│   ILogRepository     │◀──│ WindowsEventLogRepository│
+  │─────────────────────│    on     │──────────────────────│   │──────────────────────────│
+  │ + onRefresh()       │ interface │ + read()             │   │ (EvtQuery / EvtNext /    │
+  │ + onOpenLog()       │           │ + availableLogs()    │   │  EvtRender — winevt.h)   │
+  │ + onSaveLog()       │           └──────────────────────┘   └──────────────────────────┘
+  │ + onImportView()    │
+  └─────────────────────┘           ┌──────────────────────┐   ┌──────────────────────────┐
+                                    │    «interface»       │   │       «class»            │
+  ┌─────────────────────┐  depends  │   IEventExporter     │◀──│      CsvExporter         │
+  │     «class»         │──────────▶│──────────────────────│   │──────────────────────────│
+  │    EventModels      │    on     │ + exportEvents()     │   │ (std::ofstream, CSV      │
+  │─────────────────────│ interface │ + formatName()       │   │  quoting — no Windows API│
+  │ + populateTree()    │           │ + fileExtension()    │   │  no GTK)                 │
+  │ + populateTables()  │           └──────────────────────┘   └──────────────────────────┘
+  │ + populateEvent     │
+  │     Details()       │           ┌──────────────────────┐   ┌──────────────────────────┐
+  │ + loadLogEvents()   │  depends  │    «interface»       │   │       «class»            │
+  └─────────────────────┘──────────▶│IStatisticsCalculator │◀──│EventStatisticsCalculator │
+                            on      │──────────────────────│   │──────────────────────────│
+  ┌─────────────────────┐ interface │ + calculate(logName, │   │ (reads event log counts  │
+  │     «class»         │           │     hoursBack)       │   │  via ILogRepository      │
+  │    MainWindow       │           │     : EventStatistics│   │  internally)             │
+  │─────────────────────│           └──────────────────────┘   └──────────────────────────┘
+  │ + activate() [static│
+  └─────────────────────┘
 
-  Arrows show direction of dependency.
-  UI modules ──▶ abstraction ◀── platform modules
-  (Both high-level and low-level depend on the interface, not each other.)
+  main.cpp is the ONLY file that names concrete types:
+    auto repository = ILogRepository::create();   // → WindowsEventLogRepository
+    auto exporter   = std::make_unique<CsvExporter>();
+  All other files receive interface pointers through EventViewerContext.
+
+  Dependency arrows:  UI ──▶ abstraction ◀── infrastructure
+  Both sides depend on the interface; neither depends on the other.
 ```
 
 ---
 
-## Full Module Dependency Overview
+## Full Class Dependency Overview (C++17)
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                          main.c (entry point)                          │
-└───────────────────────────────┬────────────────────────────────────────┘
-                                │
-              ┌─────────────────┼──────────────────┐
-              ▼                 ▼                  ▼
-   ┌──────────────────┐  ┌──────────────┐  ┌─────────────────┐
-   │   UI Layer       │  │  Data Layer  │  │   Core Layer    │
-   │──────────────────│  │──────────────│  │─────────────────│
-   │ main_window.c    │  │ csv_exporter │  │ event_record.c  │
-   │ menu_bar.c       │  │ csv_importer │  │ event_log_      │
-   │ tool_bar.c       │  └──────┬───────┘  │   windows.c     │
-   │ sidebar.c        │         │          │ event_          │
-   │ action_handlers.c│         │          │   statistics.c  │
-   │ event_models.c   │         │          └────────┬────────┘
-   └────────┬─────────┘         │                   │
-            │                   │                   │
-            └──────────┬────────┘                   │
-                       ▼                            │
-           ┌───────────────────────┐                │
-           │  «interface»          │◀───────────────┘
-           │  EventLogRepository   │
-           └───────────────────────┘
-                       ▲
-            ┌──────────┴──────────┐
-            ▼                     ▼
-┌───────────────────┐   ┌──────────────────────┐
-│  Utils Layer      │   │  Platform Impl       │
-│───────────────────│   │──────────────────────│
-│ time_formatter.c  │   │ event_log_windows.c  │
-│ string_utils.c    │   │ csv_importer.c       │
-│ privilege_check.c │   └──────────────────────┘
-└───────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                    main.cpp  (Composition Root)                              │
+│  Creates: ILogRepository::create()  →  WindowsEventLogRepository            │
+│           std::make_unique<CsvExporter>()                                   │
+│  Injects into EventViewerContext → passed to MainWindow::activate()         │
+└────────────────────────────────┬─────────────────────────────────────────────┘
+                                 │
+              ┌──────────────────┼──────────────────────┐
+              ▼                  ▼                       ▼
+   ┌──────────────────┐  ┌───────────────────┐  ┌──────────────────────────┐
+   │    UI Layer      │  │   Data Layer      │  │       Core Layer         │
+   │──────────────────│  │───────────────────│  │──────────────────────────│
+   │ MainWindow       │  │ CsvExporter       │  │ EventRecord              │
+   │ ActionHandlers   │  │  : IEventExporter │  │ EventLevel (enum class)  │
+   │ EventModels      │  │ CsvImporter       │  │ EventStatistics (struct) │
+   │ MenuBar          │  └────────┬──────────┘  │ EventStatisticsCalculator│
+   │ ToolBar          │           │             │  : IStatisticsCalculator │
+   │ Sidebar          │           │             └──────────────┬───────────┘
+   └────────┬─────────┘           │                            │
+            │                    └───────────────────┐         │
+            └──────────────────────────────────────┐ │         │
+                                                   ▼ ▼         ▼
+                              ┌─────────────────────────────────────┐
+                              │           «interface»               │
+                              │          ILogRepository             │
+                              └──────────────────┬──────────────────┘
+                                                 │  implements
+                              ┌──────────────────┴──────────────────┐
+                              ▼                                      ▼
+               ┌──────────────────────────┐        ┌─────────────────────────┐
+               │ WindowsEventLogRepository│        │      Utils Layer        │
+               │  (platform/Windows only) │        │─────────────────────────│
+               └──────────────────────────┘        │ StringUtils             │
+                                                   │ TimeFormatter           │
+                                                   │ PrivilegeCheck          │
+                                                   └─────────────────────────┘
 ```
 
 ---
 
 ## Summary Table
 
-| Principle | Applied In | Mechanism |
-|-----------|-----------|-----------|
-| **SRP** | All 33 modules | Each file has one focused responsibility |
-| **OCP** | `csv_exporter.c`, future exporters | `ExportStrategy` function pointer pattern |
-| **LSP** | `event_log_windows.c`, `csv_importer.c` | Both satisfy `EventLogRepository` contract fully |
-| **ISP** | `MainWindow`, `EventModels`, `AppState` | God-struct decomposed into role-specific structs |
-| **DIP** | `action_handlers.c` → `EventLogRepository` | UI depends on interface, not on `winevt.h` |
+| Principle | Applied In (C++17) | Mechanism |
+|-----------|-------------------|-----------|
+| **SRP** | All classes | Each class/file has one focused responsibility — no class mixes GTK, Windows API, and business logic |
+| **OCP** | `IEventExporter`, `CsvExporter` | New export formats (JSON, XML) implement `IEventExporter` — zero changes to existing classes |
+| **LSP** | `ILogRepository`, `WindowsEventLogRepository` | Any `ILogRepository` implementation satisfies the contract; `read()` never throws, always returns a valid vector |
+| **ISP** | `ILogRepository`, `IEventExporter`, `IStatisticsCalculator` | Three separate focused interfaces; no consumer depends on methods it does not use |
+| **DIP** | `ActionHandlers`, `EventModels`, `MainWindow` | All UI classes hold interface pointers (`ILogRepository*`, `IEventExporter*`); `main.cpp` is the sole composition root |
 
 ---
 
