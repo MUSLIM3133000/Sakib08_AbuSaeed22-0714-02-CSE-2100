@@ -1,20 +1,26 @@
 /**
  * @file utils/platform/privilege_check.h
- * @brief Windows admin privilege check (C++17)
+ * @brief Windows administrator privilege detection
  *
- * C improvement: returns bool instead of BOOL (portable, type-safe).
+ * Isolated here so that all Windows security API usage is confined
+ * to utils/platform/ — no other module needs to know about SIDs.
+ *
+ * @platform Windows (uses AllocateAndInitializeSid, CheckTokenMembership)
+ * @author EventLogReader Team
+ * @date February 2026
+ * @version 2.0
  */
 
-#pragma once
+#ifndef PRIVILEGE_CHECK_H
+#define PRIVILEGE_CHECK_H
 
-namespace EventViewer::PlatformUtils {
+#include <windows.h>
 
 /**
- * @brief Checks whether the current process has administrator rights.
- * @return true if running as admin, false otherwise.
- *
- * C equivalent: BOOL PlatformUtils_IsRunningAsAdmin(void);
+ * @brief Checks whether the current process is running with administrator rights
+ * @return TRUE if the process token belongs to the built-in Administrators group
+ * @return FALSE otherwise (or if the check itself fails)
  */
-bool isRunningAsAdmin() noexcept;
+BOOL PlatformUtils_IsRunningAsAdmin(void);
 
-} // namespace EventViewer::PlatformUtils
+#endif /* PRIVILEGE_CHECK_H */
