@@ -1,289 +1,272 @@
-# SOLID Principles — UML Diagram
+# MVC Architecture — UML Diagram
 
 ---
 
-## 1. Single Responsibility Principle (SRP)
-> *Each class has one focused reason to change.*
+## MVC Overview
+
+> *The application follows the **Model-View-Controller (MVC)** pattern,
+> where each layer has a clear, focused responsibility.*
 
 ```
-┌──────────────────────────┐   ┌──────────────────────────┐   ┌──────────────────────────┐
-│      «class»             │   │      «class»             │   │      «class»             │
-│      main.cpp            │   │      EventRecord         │   │ EventStatisticsCalculator│
-│──────────────────────────│   │──────────────────────────│   │──────────────────────────│
-│ + main()                 │   │ - m_eventId: uint32_t    │   │ + calculate(logName,     │
-│                          │   │ - m_level: EventLevel    │   │     hoursBack)           │
-│──────────────────────────│   │ - m_source: string       │   │   : EventStatistics      │
-│ Responsibility:          │   │ - m_message: string      │   │──────────────────────────│
-│ Composition root only.   │   │ - m_timestamp: string    │   │ Responsibility:          │
-│ Wires dependencies and   │   │──────────────────────────│   │ Aggregate event counts   │
-│ starts GTK. No business  │   │ + eventId(): uint32_t    │   │ from a log channel.      │
-│ logic.                   │   │ + level(): EventLevel    │   │ No Windows API exposure  │
-└──────────────────────────┘   │ + source(): string       │   │ to callers.              │
-                               │ + message(): string      │   └──────────────────────────┘
-                               │ + levelString(): char*   │
-                               │──────────────────────────│
-                               │ Responsibility:          │
-                               │ Pure data object.        │
-                               │ No I/O, no Windows API.  │
-                               └──────────────────────────┘
-
-┌──────────────────────────┐   ┌──────────────────────────┐   ┌──────────────────────────┐
-│      «class»             │   │      «class»             │   │      «class»             │
-│    TimeFormatter         │   │     StringUtils          │   │    PrivilegeCheck        │
-│   (time_formatter.cpp)   │   │   (string_utils.cpp)     │   │  (privilege_check.cpp)   │
-│──────────────────────────│   │──────────────────────────│   │──────────────────────────│
-│ + filetimeToString(      │   │ + wcharToUtf8(           │   │ + isRunAsAdmin(): bool   │
-│     FILETIME): string    │   │     wstring): string     │   │──────────────────────────│
-│──────────────────────────│   │──────────────────────────│   │ Responsibility:          │
-│ Responsibility:          │   │ Responsibility:          │   │ Detect admin privilege.  │
-│ FILETIME → readable      │   │ Wide string <-> UTF-8    │   │ Nothing else.            │
-│ timestamp string only.   │   │ conversion only.         │   └──────────────────────────┘
-└──────────────────────────┘   └──────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────┐
+│                        main.cpp (Entry Point)                         │
+│  Creates Model infrastructure, wires View + Controller via context   │
+└──────────────────────────────┬────────────────────────────────────────┘
+                               │
+          ┌────────────────────┼────────────────────┐
+          ▼                    ▼                     ▼
+┌──────────────────┐ ┌──────────────────┐ ┌──────────────────────────┐
+│   MODEL Layer    │ │   VIEW Layer     │ │   CONTROLLER Layer       │
+│──────────────────│ │──────────────────│ │──────────────────────────│
+│ EventRecord      │ │ MainWindow       │ │ ActionHandlers           │
+│ ILogRepository   │ │ MenuBar          │ │ EventController          │
+│ WindowsEventLog  │ │ ToolBar          │ │  (populateTree,          │
+│  Repository      │ │ Sidebar          │ │   populateTables,        │
+│ EventStatistics  │ │ EventViewerCtx   │ │   loadLogEvents,         │
+│ CsvExporter      │ │                  │ │   populateEventDetails)  │
+│ CsvImporter      │ │                  │ │                          │
+└──────────────────┘ └──────────────────┘ └──────────────────────────┘
 ```
 
 ---
 
-## 2. Open/Closed Principle (OCP)
-> *Open for extension (new export formats), closed for modification.*
+## 1. MODEL Layer — Data & Business Logic
+
+> *The Model contains all data structures, business logic, and data access.*
 
 ```
+┌──────────────────────────────┐   ┌──────────────────────────────┐
+│      «class»                 │   │      «struct»                │
+│      EventRecord             │   │      EventStatistics         │
+│   (model/types/)             │   │   (model/statistics/)        │
+│──────────────────────────────│   │──────────────────────────────│
+│ - m_eventId: uint32_t        │   │ + criticalCount: uint32_t    │
+│ - m_level: EventLevel        │   │ + errorCount: uint32_t       │
+│ - m_source: string           │   │ + warningCount: uint32_t     │
+│ - m_message: string          │   │ + informationCount: uint32_t │
+│ - m_timestamp: string        │   │ + auditSuccessCount: uint32_t│
+│──────────────────────────────│   │ + auditFailureCount: uint32_t│
+│ + eventId(): uint32_t        │   │──────────────────────────────│
+│ + level(): EventLevel        │   │ + total(): uint32_t          │
+│ + source(): string           │   └──────────────────────────────┘
+│ + levelString(): char*       │
+│──────────────────────────────│
+│ Responsibility:              │
+│ Pure data object.            │
+│ No I/O, no Windows API.     │
+└──────────────────────────────┘
+
               ┌───────────────────────────────────────┐
               │            «interface»                │
-              │           IEventExporter              │
+              │           ILogRepository              │
+              │         (model/repository/)           │
               │───────────────────────────────────────│
-              │ + exportEvents(path: string,          │
-              │     events: vector<EventRecord>)      │
-              │     : bool                            │
-              │ + formatName()    : string            │
-              │ + fileExtension() : string            │
+              │ + read(logName, hoursBack, maxEvents) │
+              │     : vector<EventRecord>             │
+              │ + availableLogs(): vector<wstring>     │
+              │ + [static] create(): unique_ptr        │
               └──────────────────┬────────────────────┘
                                  │  implements
-              ┌──────────────────┴────────────────────┐
-              │                                       │
-              ▼                                       ▼
-┌─────────────────────────────┐       ┌─────────────────────────────┐
-│        «class»              │       │      «class» (future)       │
-│       CsvExporter           │       │       JsonExporter          │
-│─────────────────────────────│       │─────────────────────────────│
-│ + exportEvents(...): bool   │       │ + exportEvents(...): bool   │
-│ + formatName(): "CSV"       │       │ + formatName(): "JSON"      │
-│ + fileExtension(): "csv"    │       │ + fileExtension(): "json"   │
-│─────────────────────────────│       │─────────────────────────────│
-│ - quoteField(s): string     │       │ Added without modifying     │
-│                             │       │ CsvExporter or any caller.  │
-└─────────────────────────────┘       └─────────────────────────────┘
+                                 ▼
+              ┌───────────────────────────────────────┐
+              │            «class»                    │
+              │    WindowsEventLogRepository          │
+              │   (model/repository/windows/)         │
+              │───────────────────────────────────────│
+              │ Uses EvtQuery / EvtNext / EvtRender   │
+              │ (winevt.h)                            │
+              └───────────────────────────────────────┘
 
-  ActionHandlers calls ctx->eventExporter->exportEvents() via IEventExporter*.
-  Swapping CSV → JSON = change one line in main.cpp only.
+┌──────────────────────────────┐   ┌──────────────────────────────┐
+│      «interface»             │   │      «class»                 │
+│     IEventExporter           │   │     CsvImporter              │
+│   (model/export/)            │   │   (model/import/)            │
+│──────────────────────────────│   │──────────────────────────────│
+│ + exportEvents(path, events) │   │ + load(path: string)         │
+│     : bool                   │   │     : vector<EventRecord>    │
+│ + formatName(): string       │   │──────────────────────────────│
+│ + fileExtension(): string    │   │ Parses RFC-4180 CSV files.   │
+│──────────────────────────────│   └──────────────────────────────┘
+│      ▲ implements            │
+│      │                       │
+│ ┌────┴──────────────────┐    │
+│ │    CsvExporter        │    │
+│ │  formatName: "CSV"    │    │
+│ └───────────────────────┘    │
+└──────────────────────────────┘
 ```
 
 ---
 
-## 3. Liskov Substitution Principle (LSP)
-> *Any ILogRepository implementation can be substituted without breaking callers.*
+## 2. VIEW Layer — GTK4 Widgets (Display Only)
+
+> *The View creates and manages GTK widgets. It does NOT contain business logic.*
 
 ```
-              ┌───────────────────────────────────────────┐
-              │              «abstract class»             │
-              │             ILogRepository                │
-              │───────────────────────────────────────────│
-              │ + read(logName: wchar_t*,                 │
-              │     hoursBack: int,                       │
-              │     maxEvents: int)                       │
-              │     : vector<EventRecord>   (pure virtual)│
-              │ + availableLogs()                         │
-              │     : vector<wstring>       (pure virtual)│
-              │ + ~ILogRepository()         (virtual)     │
-              │───────────────────────────────────────────│
-              │ [static] + create()                       │
-              │     : unique_ptr<ILogRepository>          │
-              │   Returns WindowsEventLogRepository on    │
-              │   Windows; stub on other platforms.       │
-              └──────────────────┬────────────────────────┘
-                                 │  implements
-              ┌──────────────────┴────────────────────┐
-              │                                       │
-              ▼                                       ▼
-┌──────────────────────────────┐    ┌──────────────────────────────┐
-│          «class»             │    │       «class» (future)       │
-│  WindowsEventLogRepository   │    │      CsvLogRepository        │
-│──────────────────────────────│    │──────────────────────────────│
-│ + read(...):                 │    │ + read(...):                 │
-│     vector<EventRecord>      │    │     vector<EventRecord>      │
-│ + availableLogs():           │    │ + availableLogs():           │
-│     vector<wstring>          │    │     vector<wstring>          │
-│──────────────────────────────│    │──────────────────────────────│
-│ Uses EvtQuery / EvtNext /    │    │ Reads from a CSV file via    │
-│ EvtRender (winevt.h).        │    │ CsvImporter::load().         │
-└──────────────────────────────┘    └──────────────────────────────┘
+┌──────────────────────────────┐   ┌──────────────────────────────┐
+│      «class»                 │   │      «struct»                │
+│      MainWindow              │   │   EventViewerContext         │
+│   (view/windows/)            │   │   (view/context/)            │
+│──────────────────────────────│   │──────────────────────────────│
+│ + activate(app, userData)    │   │ + app: GtkApplication*       │
+│   [static]                   │   │ + window: GtkWidget*         │
+│──────────────────────────────│   │ + notebook: GtkWidget*       │
+│ Creates window layout:       │   │ + treeView / treeStore       │
+│ - Menu bar (View)            │   │ + adminStore / logStore      │
+│ - Toolbar  (View)            │   │ + eventDetailsStore          │
+│ - Sidebar  (View)            │   │ + currentLogName: string     │
+│ - Content area (tabs)        │   │ + logRepository: ILogRepo*   │
+│ Delegates data population    │   │ + eventExporter: IExporter*  │
+│ to EventController.          │   └──────────────────────────────┘
+└──────────────────────────────┘
 
-  Callers (EventModels, ActionHandlers) hold ILogRepository* only.
-  Either concrete class can be substituted — same contract, no caller changes.
-  LSP is upheld: read() never throws, always returns a valid (possibly empty) vector.
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│    «class»       │  │    «class»       │  │    «class»       │
+│    MenuBar       │  │    ToolBar       │  │    Sidebar       │
+│ (view/components)│  │ (view/components)│  │ (view/components)│
+│──────────────────│  │──────────────────│  │──────────────────│
+│ + create(ctx)    │  │ + create(ctx)    │  │ + create(ctx)    │
+│   : GtkWidget*   │  │   : GtkWidget*   │  │   : GtkWidget*   │
+│──────────────────│  │──────────────────│  │──────────────────│
+│ File/Action/View/│  │ Back/Forward/    │  │ Tree view with   │
+│ Help menus.      │  │ Refresh buttons. │  │ log hierarchy.   │
+│ Pure widget      │  │ Wires to         │  │ Wires selection  │
+│ creation.        │  │ Controller.      │  │ to Controller.   │
+└──────────────────┘  └──────────────────┘  └──────────────────┘
 ```
 
 ---
 
-## 4. Interface Segregation Principle (ISP)
-> *Focused interfaces — no class is forced to depend on methods it does not use.*
+## 3. CONTROLLER Layer — User Action Handling
 
-### Separate interfaces per role:
+> *The Controller handles user input from the View, interacts with the Model,
+> and updates the View accordingly.*
+
 ```
-┌───────────────────────────────────┐    ┌───────────────────────────────────┐
-│          «interface»              │    │           «class»                 │
-│         IEventExporter            │    │          CsvImporter              │
-│───────────────────────────────────│    │───────────────────────────────────│
-│ + exportEvents(path, events): bool│    │ + load(path: string)             │
-│ + formatName()    : string        │    │     : vector<EventRecord>        │
-│ + fileExtension() : string        │    │───────────────────────────────────│
-│───────────────────────────────────│    │ - parseCsvRow(line: string)      │
-│ Consumers: ActionHandlers         │    │     : vector<string>             │
-│ (save/export only)                │    │───────────────────────────────────│
-│ Does NOT include read or import.  │    │ Consumers: ActionHandlers (import)│
-└───────────────────────────────────┘    │ Does NOT include export.          │
-                                         └───────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                      «class» ActionHandlers                      │
+│                    (controller/action_handlers)                   │
+│──────────────────────────────────────────────────────────────────│
+│ + onQuit(...)        — Exits the application                     │
+│ + onAbout(...)       — Shows About dialog                        │
+│ + onRefresh(...)     — Refreshes current log view                │
+│ + onOpenLog(...)     — Opens file dialog → CsvImporter (Model)   │
+│ + onSaveLog(...)     — Save dialog → IEventExporter (Model)      │
+│ + onCreateView(...)  — Placeholder for custom views              │
+│ + onImportView(...)  — Import custom view dialog                 │
+│ + onTreeSelectionChanged(...)  — Delegates to EventController    │
+│──────────────────────────────────────────────────────────────────│
+│ Responsibility: Receive user input → call Model → update View    │
+└──────────────────────────────────────────────────────────────────┘
 
-┌───────────────────────────────────┐    ┌───────────────────────────────────┐
-│          «interface»              │    │          «interface»              │
-│         ILogRepository            │    │      IStatisticsCalculator        │
-│───────────────────────────────────│    │───────────────────────────────────│
-│ + read(...): vector<EventRecord>  │    │ + calculate(logName, hoursBack)  │
-│ + availableLogs(): vector<wstring>│    │     : EventStatistics            │
-│───────────────────────────────────│    │───────────────────────────────────│
-│ Consumers: EventModels,           │    │ Consumers: ActionHandlers        │
-│ ActionHandlers.                   │    │ Stats only — no read, no export. │
-│ Read operations only.             │    └───────────────────────────────────┘
-│ No stats, no export, no import.   │
-└───────────────────────────────────┘
-
-  Each interface covers one role. No consumer is forced to depend on methods
-  it does not call.
-```
-
-### EventViewerContext — focused dependency carrier:
-```
-┌──────────────────────────────────────────────────────────────┐
-│                  «struct»  EventViewerContext                │
-│                   (event_viewer_context.h)                   │
-│──────────────────────────────────────────────────────────────│
-│ GTK widgets:                                                 │
-│   app: GtkApplication*      window: GtkWidget*              │
-│   notebook: GtkWidget*      treeView: GtkWidget*            │
-│   treeStore: GtkTreeStore*                                   │
-│   adminTreeView / adminStore: GtkWidget* / GtkListStore*    │
-│   recentTreeView / recentStore: GtkWidget* / GtkListStore*  │
-│   logTreeView / logStore: GtkWidget* / GtkListStore*        │
-│   eventDetailsView / eventDetailsStore                       │
-│──────────────────────────────────────────────────────────────│
-│ Application state:                                           │
-│   currentLogName: std::string   (replaces char* + strdup)   │
-│──────────────────────────────────────────────────────────────│
-│ Injected dependencies (interface pointers — DIP):           │
-│   logRepository: ILogRepository*   ← never a concrete type  │
-│   eventExporter: IEventExporter*   ← never a concrete type  │
-└──────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                     «class» EventController                      │
+│                  (controller/event_controller)                   │
+│──────────────────────────────────────────────────────────────────│
+│ + populateTree(ctx)              — Fills sidebar tree (View)     │
+│ + populateTables(ctx, stats...)  — Fills overview tables (View)  │
+│ + populateEventDetails(ctx, events)  — Fills event list (View)   │
+│ + loadLogEvents(ctx, logName)    — Reads Model → updates View    │
+│──────────────────────────────────────────────────────────────────│
+│ Responsibility: Bridge Model data into View (GTK stores)         │
+│ Renamed from EventModels to clarify MVC Controller role.         │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 5. Dependency Inversion Principle (DIP)
-> *High-level modules depend on abstractions, not on concrete platform code.*
+## 4. MVC Data Flow
 
 ```
-  HIGH-LEVEL (UI Layer)              ABSTRACTIONS               LOW-LEVEL (Infrastructure)
-  ─────────────────────              ────────────               ──────────────────────────
-
-  ┌─────────────────────┐           ┌──────────────────────┐   ┌──────────────────────────┐
-  │     «class»         │  depends  │    «interface»       │   │       «class»            │
-  │   ActionHandlers    │──────────▶│   ILogRepository     │◀──│ WindowsEventLogRepository│
-  │─────────────────────│    on     │──────────────────────│   │──────────────────────────│
-  │ + onRefresh()       │ interface │ + read()             │   │ (EvtQuery / EvtNext /    │
-  │ + onOpenLog()       │           │ + availableLogs()    │   │  EvtRender — winevt.h)   │
-  │ + onSaveLog()       │           └──────────────────────┘   └──────────────────────────┘
-  │ + onImportView()    │
-  └─────────────────────┘           ┌──────────────────────┐   ┌──────────────────────────┐
-                                    │    «interface»       │   │       «class»            │
-  ┌─────────────────────┐  depends  │   IEventExporter     │◀──│      CsvExporter         │
-  │     «class»         │──────────▶│──────────────────────│   │──────────────────────────│
-  │    EventModels      │    on     │ + exportEvents()     │   │ (std::ofstream, CSV      │
-  │─────────────────────│ interface │ + formatName()       │   │  quoting — no Windows API│
-  │ + populateTree()    │           │ + fileExtension()    │   │  no GTK)                 │
-  │ + populateTables()  │           └──────────────────────┘   └──────────────────────────┘
-  │ + populateEvent     │
-  │     Details()       │           ┌──────────────────────┐   ┌──────────────────────────┐
-  │ + loadLogEvents()   │  depends  │    «interface»       │   │       «class»            │
-  └─────────────────────┘──────────▶│IStatisticsCalculator │◀──│EventStatisticsCalculator │
-                            on      │──────────────────────│   │──────────────────────────│
-  ┌─────────────────────┐ interface │ + calculate(logName, │   │ (reads event log counts  │
-  │     «class»         │           │     hoursBack)       │   │  via ILogRepository      │
-  │    MainWindow       │           │     : EventStatistics│   │  internally)             │
-  │─────────────────────│           └──────────────────────┘   └──────────────────────────┘
-  │ + activate() [static│
-  └─────────────────────┘
-
-  main.cpp is the ONLY file that names concrete types:
-    auto repository = ILogRepository::create();   // → WindowsEventLogRepository
-    auto exporter   = std::make_unique<CsvExporter>();
-  All other files receive interface pointers through EventViewerContext.
-
-  Dependency arrows:  UI ──▶ abstraction ◀── infrastructure
-  Both sides depend on the interface; neither depends on the other.
+  USER clicks "Application" in sidebar (View)
+       │
+       ▼
+  Sidebar → GtkTreeSelection "changed" signal
+       │
+       ▼
+  ActionHandlers::onTreeSelectionChanged()     ← CONTROLLER
+       │
+       ├── Reads selected log name from GtkTreeModel
+       │
+       ▼
+  EventController::loadLogEvents(ctx, "Application")  ← CONTROLLER
+       │
+       ├── Calls ctx->logRepository->read(...)         ← MODEL
+       │       (ILogRepository → WindowsEventLogRepository)
+       │
+       ├── Receives vector<EventRecord>                ← MODEL data
+       │
+       ▼
+  EventController::populateEventDetails(ctx, events)   ← CONTROLLER
+       │
+       └── Fills ctx->eventDetailsStore (GtkListStore)  ← VIEW updated
 ```
 
 ---
 
-## Full Class Dependency Overview (C++17)
+## 5. MVC Directory Structure
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                    main.cpp  (Composition Root)                              │
-│  Creates: ILogRepository::create()  →  WindowsEventLogRepository            │
-│           std::make_unique<CsvExporter>()                                   │
-│  Injects into EventViewerContext → passed to MainWindow::activate()         │
-└────────────────────────────────┬─────────────────────────────────────────────┘
-                                 │
-              ┌──────────────────┼──────────────────────┐
-              ▼                  ▼                       ▼
-   ┌──────────────────┐  ┌───────────────────┐  ┌──────────────────────────┐
-   │    UI Layer      │  │   Data Layer      │  │       Core Layer         │
-   │──────────────────│  │───────────────────│  │──────────────────────────│
-   │ MainWindow       │  │ CsvExporter       │  │ EventRecord              │
-   │ ActionHandlers   │  │  : IEventExporter │  │ EventLevel (enum class)  │
-   │ EventModels      │  │ CsvImporter       │  │ EventStatistics (struct) │
-   │ MenuBar          │  └────────┬──────────┘  │ EventStatisticsCalculator│
-   │ ToolBar          │           │             │  : IStatisticsCalculator │
-   │ Sidebar          │           │             └──────────────┬───────────┘
-   └────────┬─────────┘           │                            │
-            │                    └───────────────────┐         │
-            └──────────────────────────────────────┐ │         │
-                                                   ▼ ▼         ▼
-                              ┌─────────────────────────────────────┐
-                              │           «interface»               │
-                              │          ILogRepository             │
-                              └──────────────────┬──────────────────┘
-                                                 │  implements
-                              ┌──────────────────┴──────────────────┐
-                              ▼                                      ▼
-               ┌──────────────────────────┐        ┌─────────────────────────┐
-               │ WindowsEventLogRepository│        │      Utils Layer        │
-               │  (platform/Windows only) │        │─────────────────────────│
-               └──────────────────────────┘        │ StringUtils             │
-                                                   │ TimeFormatter           │
-                                                   │ PrivilegeCheck          │
-                                                   └─────────────────────────┘
+src/
+├── main/                          ← Entry Point (Composition Root)
+│   └── main.cpp
+│
+├── model/                         ← MODEL: Data + Business Logic
+│   ├── types/
+│   │   ├── event_record.h
+│   │   └── event_record.cpp
+│   ├── statistics/
+│   │   ├── event_statistics.h
+│   │   └── event_statistics.cpp
+│   ├── repository/
+│   │   ├── log_repository.h       (ILogRepository interface)
+│   │   └── windows/
+│   │       ├── event_log_windows.h
+│   │       └── event_log_windows.cpp
+│   ├── export/
+│   │   ├── csv_exporter.h         (IEventExporter + CsvExporter)
+│   │   └── csv_exporter.cpp
+│   └── import/
+│       ├── csv_importer.h
+│       └── csv_importer.cpp
+│
+├── view/                          ← VIEW: GTK4 Widgets (Display)
+│   ├── context/
+│   │   └── event_viewer_context.h
+│   ├── windows/
+│   │   ├── main_window.h
+│   │   └── main_window.cpp
+│   └── components/
+│       ├── menu_bar.h / .cpp
+│       ├── tool_bar.h / .cpp
+│       └── sidebar.h / .cpp
+│
+├── controller/                    ← CONTROLLER: User Actions
+│   ├── action_handlers.h / .cpp
+│   └── event_controller.h / .cpp
+│
+└── utils/                         ← Shared Utilities
+    ├── conversion/
+    │   ├── string_utils.h / .cpp
+    ├── time/
+    │   ├── time_formatter.h / .cpp
+    └── platform/
+        ├── privilege_check.h / .cpp
 ```
+
+**Total:** 33 files across 16 directories
 
 ---
 
 ## Summary Table
 
-| Principle | Applied In (C++17) | Mechanism |
-|-----------|-------------------|-----------|
-| **SRP** | All classes | Each class/file has one focused responsibility — no class mixes GTK, Windows API, and business logic |
-| **OCP** | `IEventExporter`, `CsvExporter` | New export formats (JSON, XML) implement `IEventExporter` — zero changes to existing classes |
-| **LSP** | `ILogRepository`, `WindowsEventLogRepository` | Any `ILogRepository` implementation satisfies the contract; `read()` never throws, always returns a valid vector |
-| **ISP** | `ILogRepository`, `IEventExporter`, `IStatisticsCalculator` | Three separate focused interfaces; no consumer depends on methods it does not use |
-| **DIP** | `ActionHandlers`, `EventModels`, `MainWindow` | All UI classes hold interface pointers (`ILogRepository*`, `IEventExporter*`); `main.cpp` is the sole composition root |
+| MVC Layer | Files | Responsibility |
+|-----------|-------|---------------|
+| **Model** | `event_record`, `event_statistics`, `log_repository`, `event_log_windows`, `csv_exporter`, `csv_importer` | Data structures, business logic, data access (Windows API), import/export |
+| **View** | `main_window`, `menu_bar`, `tool_bar`, `sidebar`, `event_viewer_context` | GTK4 widget creation, layout, display — no business logic |
+| **Controller** | `action_handlers`, `event_controller` | Handles user input, reads Model data, updates View (GTK stores) |
+| **Utils** | `string_utils`, `time_formatter`, `privilege_check` | Shared helpers — no MVC role |
+| **Entry** | `main.cpp` | Composition root — wires M, V, C together |
 
 ---
 

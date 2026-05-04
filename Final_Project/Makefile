@@ -1,40 +1,42 @@
-CC      = gcc
-CFLAGS  = -Wall -Wextra -std=c11 -O2 -Isrc `pkg-config --cflags gtk4`
-LDFLAGS = `pkg-config --libs gtk4` -lwevtapi -ladvapi32
+CXX     = g++
+CXXFLAGS = -Wall -Wextra -std=c++17 -O2 -Isrc `pkg-config --cflags gtk4`
+LDFLAGS  = `pkg-config --libs gtk4` -lwevtapi -ladvapi32
 
 SRC_DIR = src
 BLD_DIR = build
 OBJ_DIR = $(BLD_DIR)/obj
 BIN_DIR = $(BLD_DIR)/bin
 
-SOURCES_MAIN = $(SRC_DIR)/main/main.c
+# ── MVC Source Files ──────────────────────────────────────────────────────────
 
-SOURCES_CORE = \
-    $(SRC_DIR)/core/types/event_record.c \
-    $(SRC_DIR)/core/readers/windows/event_log_windows.c \
-    $(SRC_DIR)/core/statistics/event_statistics.c
+SOURCES_MAIN = $(SRC_DIR)/main/main.cpp
 
-SOURCES_UI = \
-    $(SRC_DIR)/ui/gtk/windows/main_window.c \
-    $(SRC_DIR)/ui/gtk/components/menu_bar.c \
-    $(SRC_DIR)/ui/gtk/components/tool_bar.c \
-    $(SRC_DIR)/ui/gtk/components/sidebar.c \
-    $(SRC_DIR)/ui/gtk/callbacks/action_handlers.c \
-    $(SRC_DIR)/ui/models/event_models.c
+SOURCES_MODEL = \
+    $(SRC_DIR)/model/types/event_record.cpp \
+    $(SRC_DIR)/model/repository/windows/event_log_windows.cpp \
+    $(SRC_DIR)/model/statistics/event_statistics.cpp \
+    $(SRC_DIR)/model/export/csv_exporter.cpp \
+    $(SRC_DIR)/model/import/csv_importer.cpp
 
-SOURCES_DATA = \
-    $(SRC_DIR)/data/export/csv_exporter.c \
-    $(SRC_DIR)/data/import/csv_importer.c
+SOURCES_VIEW = \
+    $(SRC_DIR)/view/windows/main_window.cpp \
+    $(SRC_DIR)/view/components/menu_bar.cpp \
+    $(SRC_DIR)/view/components/tool_bar.cpp \
+    $(SRC_DIR)/view/components/sidebar.cpp
+
+SOURCES_CONTROLLER = \
+    $(SRC_DIR)/controller/action_handlers.cpp \
+    $(SRC_DIR)/controller/event_controller.cpp
 
 SOURCES_UTILS = \
-    $(SRC_DIR)/utils/conversion/string_utils.c \
-    $(SRC_DIR)/utils/time/time_formatter.c \
-    $(SRC_DIR)/utils/platform/privilege_check.c
+    $(SRC_DIR)/utils/conversion/string_utils.cpp \
+    $(SRC_DIR)/utils/time/time_formatter.cpp \
+    $(SRC_DIR)/utils/platform/privilege_check.cpp
 
-SOURCES = $(SOURCES_MAIN) $(SOURCES_CORE) $(SOURCES_UI) \
-          $(SOURCES_DATA) $(SOURCES_UTILS)
+SOURCES = $(SOURCES_MAIN) $(SOURCES_MODEL) $(SOURCES_VIEW) \
+          $(SOURCES_CONTROLLER) $(SOURCES_UTILS)
 
-OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
+OBJECTS = $(SOURCES:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
 
 TARGET = $(BIN_DIR)/event_viewer.exe
 
@@ -46,11 +48,11 @@ all: directories $(TARGET)
 	@echo ""
 
 $(TARGET): $(OBJECTS)
-	$(CC) $^ -o $@ $(LDFLAGS)
+	$(CXX) $^ -o $@ $(LDFLAGS)
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 directories:
 	@mkdir -p $(OBJ_DIR)
@@ -67,8 +69,8 @@ run: all
 
 help:
 	@echo ""
-	@echo "  Windows Event Viewer — build targets"
-	@echo "  ──────────────────────────────────────"
+	@echo "  Windows Event Viewer (MVC) — build targets"
+	@echo "  ───────────────────────────────────────────"
 	@echo "  all      Build the application (default)"
 	@echo "  clean    Remove all build artifacts"
 	@echo "  rebuild  Clean then build"
