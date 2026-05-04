@@ -17,7 +17,7 @@ Course Code: 0714 02 CSE 2100 || Course Title: Advanced Programming Laboratory
 
 ### Part A — Project Overview (Completed✅)
 1. [Introduction](#1-introduction)
-2. [Three Project Versions](#2-three-project-versions)
+2. [Four Project Versions](#2-four-project-versions)
 3. [Key Features](#3-key-features)
 4. [Technology Stack](#4-technology-stack)
 5. [Repository Structure](#5-repository-structure)
@@ -68,13 +68,13 @@ This project is a **Windows Event Viewer** application built from scratch using 
 
 ### Project Evolution
 
-This project went through a **comprehensive refactoring journey** from a monolithic 3-file application to a well-architected, modular system. We created **three different versions** to demonstrate different architectural approaches and coding styles.
+This project went through a **comprehensive refactoring journey** from a monolithic 3-file application to a well-architected, modular system. We created **four different versions** to demonstrate different architectural approaches and coding styles.
 
 ---
 
-## 2. Three Project Versions
+## 2. Four Project Versions
 
-This repository contains **THREE versions** of the same Windows Event Viewer application, each serving different educational and practical purposes:
+This repository contains **FOUR versions** of the same Windows Event Viewer application, each serving different educational and practical purposes:
 
 ### 📦 Version 1: Professional with SOLID Principles ⭐
 **File:** `windows_event_viewer_refactored.zip`
@@ -177,6 +177,42 @@ int count = read_events(handle, &events, 1000);
 - ✅ Assignment focuses on functionality over style
 - ✅ Prefer minimal documentation
 - ✅ Learning C and GTK4 basics
+
+---
+
+### 📦 Version 4: Modern C++17 MVC Architecture (Option F) 🚀
+**File:** `windows_event_viewer_mvc_cpp17.zip` (Current Active Implementation)
+
+**Characteristics:**
+- ✅ Explicit **Model-View-Controller (MVC)** architectural pattern
+- ✅ Upgraded from C to **Modern C++17**
+- ✅ Complete separation of UI rendering (View) from business logic (Model)
+- ✅ Dedicated `EventController` mediating data flow
+- ✅ Usage of standard library containers (`std::vector`, `std::string`) preventing memory leaks
+- ✅ Elimination of C-style manual memory management in favor of RAII
+- ✅ Proper domain isolation: Model (`core/`, `data/`), View (`ui/`), Controller (`controller/`)
+
+**Example Code Style:**
+```cpp
+// Controller mediating between Model and View
+void EventController::loadLogEvents(EventViewerContext* ctx, const std::string& logName) {
+    if (!ctx->logRepository) return;
+    
+    // 1. Fetch data from Model
+    auto events = ctx->logRepository->read(wname, 24, 1000);
+    
+    // 2. Push data to View (GTK store)
+    if (!events.empty()) {
+        populateEventDetails(ctx, events);
+    }
+}
+```
+
+**When to Use This Version:**
+- ✅ Best implementation of the strict MVC design pattern
+- ✅ Modernizing legacy C applications into robust C++ code
+- ✅ Demonstrating separation of concerns with Controller mediators
+- ✅ Safest memory management utilizing C++ RAII semantics
 
 ---
 
@@ -632,25 +668,16 @@ The project follows a **layered architecture** with clear separation of concerns
 
 ### Side-by-Side Comparison
 
-| Feature | Professional + SOLID | Professional - SOLID | Beginner Style |
-|---------|---------------------|---------------------|----------------|
-| **Total Files** | 33 | 33 | 33 |
-| **Directories** | 14 | 14 | 14 |
-| **Documentation Lines** | ~2,200 (Doxygen) | ~2,200 (Doxygen) | 0 (none) |
-| **Code Lines** | ~1,400 | ~1,400 | ~1,400 |
-| **Function Naming** | `EventLog_Windows_Open()` | `EventLog_Windows_Open()` | `open_log()` |
-| **Struct Naming** | `EventViewerContext` | `EventViewerContext` | `AppData` |
-| **Parameter Naming** | `eventRecord`, `logName` | `eventRecord`, `logName` | `rec`, `data` |
-| **Repository Pattern** | ✅ Yes (function pointers) | ❌ No | ❌ No |
-| **Strategy Pattern** | ✅ Yes (export formats) | ❌ No | ❌ No |
-| **Decomposed Structs** | ✅ Yes (3 structs) | ❌ No (1 god struct) | ❌ No (1 god struct) |
-| **Abstraction Layers** | 3 (UI → Interface → Impl) | 2 (UI → Impl) | 2 (UI → Impl) |
-| **Code Coupling** | Low | Medium | Medium |
-| **Extensibility** | Excellent | Good | Fair |
-| **Complexity** | High | Medium | Low |
-| **Learning Curve** | Steep | Moderate | Gentle |
-| **Compilation** | ✅ Works | ✅ Works | ✅ Works |
-| **Functionality** | ✅ Identical | ✅ Identical | ✅ Identical |
+| Feature | Professional + SOLID | Professional - SOLID | Beginner Style | C++17 MVC |
+|---------|---------------------|---------------------|----------------|-----------|
+| **Total Files** | 33 | 33 | 33 | 33 |
+| **Language** | C11 | C11 | C11 | C++17 |
+| **Architecture** | Layered / Repository | Monolithic calls | Script-like | Strict MVC |
+| **Memory Mgmt** | Manual (malloc/free) | Manual | Manual | RAII (std::string) |
+| **Data Flow** | Direct injection | Global state / Direct | Direct | Controller mediator |
+| **Function Naming** | `EventLog_Windows_Open()` | `EventLog_Windows_Open()` | `open_log()` | `ILogRepository::read()` |
+| **Coupling** | Low | Medium | Medium | Extremely Low |
+| **Complexity** | High | Medium | Low | Moderate |
 
 ### Code Style Examples
 
