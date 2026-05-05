@@ -10,7 +10,7 @@
 ```
 ┌───────────────────────────────────────────────────────────────────────┐
 │                        main.cpp (Entry Point)                         │
-│  Creates Model infrastructure, wires View + Controller via context   │
+│  Creates Model infrastructure, wires View + Controller via context    │
 └──────────────────────────────┬────────────────────────────────────────┘
                                │
           ┌────────────────────┼────────────────────┐
@@ -53,7 +53,7 @@
 │──────────────────────────────│
 │ Responsibility:              │
 │ Pure data object.            │
-│ No I/O, no Windows API.     │
+│ No I/O, no Windows API.      │
 └──────────────────────────────┘
 
               ┌───────────────────────────────────────┐
@@ -63,8 +63,8 @@
               │───────────────────────────────────────│
               │ + read(logName, hoursBack, maxEvents) │
               │     : vector<EventRecord>             │
-              │ + availableLogs(): vector<wstring>     │
-              │ + [static] create(): unique_ptr        │
+              │ + availableLogs(): vector<wstring>    │
+              │ + [static] create(): unique_ptr       │
               └──────────────────┬────────────────────┘
                                  │  implements
                                  ▼
