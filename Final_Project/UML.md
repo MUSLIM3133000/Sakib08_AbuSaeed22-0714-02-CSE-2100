@@ -145,7 +145,7 @@
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                      «class» ActionHandlers                      │
-│                    (controller/action_handlers)                   │
+│                    (controller/action_handlers)                  │
 │──────────────────────────────────────────────────────────────────│
 │ + onQuit(...)        — Exits the application                     │
 │ + onAbout(...)       — Shows About dialog                        │
